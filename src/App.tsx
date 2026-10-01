@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./lib/supabase";
 
 
@@ -1705,6 +1705,104 @@ type TodayGameResult = {
 
 const [todayGameResults, setTodayGameResults] = useState<TodayGameResult[]>([]);
 const [todayResultsReady, setTodayResultsReady] = useState(false);
+
+type AppNavigationHistoryState = {
+  apnaMatkaNavigation: true;
+  userRole: "SUPER_ADMIN" | "AGENT_ADMIN" | "CUSTOMER" | null;
+  customerPage: Page;
+  adminModule: typeof adminModule;
+  superAdminAccountView: "CUSTOMER" | "AGENT" | null;
+  betAnalyzerView: typeof betAnalyzerView;
+  agentCoinModule: typeof agentCoinModule;
+  showAgentCustomerForm: boolean;
+};
+
+const navigationHistoryInitialized = useRef(false);
+const applyingBrowserBack = useRef(false);
+const lastNavigationKey = useRef("");
+
+useEffect(() => {
+  const getNavigationKey = () => {
+    if (!isLoggedIn || !userRole) return "PUBLIC";
+
+    if (userRole === "CUSTOMER") {
+      return `CUSTOMER:${customerPage}`;
+    }
+
+    if (userRole === "SUPER_ADMIN") {
+      return `SUPER_ADMIN:${adminModule}:${superAdminAccountView || "NONE"}:${betAnalyzerView}`;
+    }
+
+    return `AGENT_ADMIN:${agentCoinModule}:${showAgentCustomerForm ? "FORM" : "NONE"}`;
+  };
+
+  const getCurrentHistoryState = (): AppNavigationHistoryState => ({
+    apnaMatkaNavigation: true,
+    userRole,
+    customerPage,
+    adminModule,
+    superAdminAccountView,
+    betAnalyzerView,
+    agentCoinModule,
+    showAgentCustomerForm,
+  });
+
+  const navigationKey = getNavigationKey();
+
+  if (!navigationHistoryInitialized.current) {
+    window.history.replaceState(getCurrentHistoryState(), "", window.location.href);
+    lastNavigationKey.current = navigationKey;
+    navigationHistoryInitialized.current = true;
+  } else if (applyingBrowserBack.current) {
+    applyingBrowserBack.current = false;
+    lastNavigationKey.current = navigationKey;
+  } else if (navigationKey !== lastNavigationKey.current) {
+    window.history.pushState(getCurrentHistoryState(), "", window.location.href);
+    lastNavigationKey.current = navigationKey;
+  }
+
+  const handleBrowserBack = (event: PopStateEvent) => {
+    const state = event.state as Partial<AppNavigationHistoryState> | null;
+
+    if (!state?.apnaMatkaNavigation) return;
+
+    if (state.userRole === "CUSTOMER" && userRole === "CUSTOMER") {
+      applyingBrowserBack.current = true;
+      setCustomerPage(state.customerPage || "home");
+      return;
+    }
+
+    if (state.userRole === "SUPER_ADMIN" && userRole === "SUPER_ADMIN") {
+      applyingBrowserBack.current = true;
+      setAdminModule(state.adminModule || "HOME");
+      setSuperAdminAccountView(state.superAdminAccountView || null);
+      setBetAnalyzerView(state.betAnalyzerView || "HOME");
+      return;
+    }
+
+    if (state.userRole === "AGENT_ADMIN" && userRole === "AGENT_ADMIN") {
+      applyingBrowserBack.current = true;
+      setAgentCoinModule(state.agentCoinModule || "OVERVIEW");
+      setShowAgentCustomerForm(Boolean(state.showAgentCustomerForm));
+    }
+  };
+
+  window.addEventListener("popstate", handleBrowserBack);
+
+  return () => {
+    window.removeEventListener("popstate", handleBrowserBack);
+  };
+}, [
+  isLoggedIn,
+  userRole,
+  customerPage,
+  adminModule,
+  superAdminAccountView,
+  betAnalyzerView,
+  agentCoinModule,
+  showAgentCustomerForm,
+]);
+
 
 
 
