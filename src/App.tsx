@@ -6506,7 +6506,7 @@ const loadSuperAdminDashboard = async () => {
 setAdminLoading(true);
 setAdminError("");
 try {
-const [agentsResult, customersResult, walletsResult, profilesResult, customerProfilesResult, supplyResult, saBalanceResult, supplyChangeResult] = await Promise.all([
+const [agentsResult, customersResult, walletsResult, profilesResult, customerProfilesResult, supplyResult, saBalanceResult, supplyChangeResult, mainSupplyResult] = await Promise.all([
   supabase.from("agents").select("id, agent_code, profile_id, status", { count: "exact" }).neq("status", "DELETED").order("created_at", { ascending: false }).limit(20),
   supabase.from("customers").select("id, profile_id, source, status, customer_code, agent_id", { count: "exact" }),
   supabase.from("wallets").select("owner_profile_id, available_balance, exposure_balance, status, currency"),
@@ -6515,6 +6515,7 @@ const [agentsResult, customersResult, walletsResult, profilesResult, customerPro
   supabase.rpc("get_super_admin_virtual_usd_supply"),
   supabase.rpc("get_super_admin_virtual_usd_balance"),
   supabase.rpc("get_super_admin_supply_change"),
+  supabase.rpc("get_super_admin_main_supply"),
 ]);
 if (agentsResult.error) throw agentsResult.error;
 if (customersResult.error) throw customersResult.error;
@@ -6524,6 +6525,7 @@ if (customerProfilesResult.error) throw customerProfilesResult.error;
 if (supplyResult.error) throw supplyResult.error;
 if (saBalanceResult.error) throw saBalanceResult.error;
 if (supplyChangeResult.error) throw supplyChangeResult.error;
+    if (mainSupplyResult.error) throw mainSupplyResult.error;
 const customers = customersResult.data || [];
 const wallets = walletsResult.data || [];
 const profileUsernames = new Map(
@@ -6573,9 +6575,10 @@ const networkExposure = agentExposure + customerExposure;
 const supply = Array.isArray(supplyResult.data) ? supplyResult.data[0] : supplyResult.data;
 const saBalance = Array.isArray(saBalanceResult.data) ? saBalanceResult.data[0] : saBalanceResult.data;
 const supplyChange = Array.isArray(supplyChangeResult.data) ? supplyChangeResult.data[0] : supplyChangeResult.data;
+const mainSupply = Array.isArray(mainSupplyResult.data) ? mainSupplyResult.data[0] : mainSupplyResult.data;
 const totalSpendable =
   Number(saBalance?.operating_available || 0) + Number(saBalance?.plus_available || 0);
-const superAdminAvailable = Number(supply?.available_supply || 0);
+const superAdminAvailable = Number(mainSupply?.super_admin_available || 0);
 setAdminAgents((agentsResult.data || []).map((agent) => {
   const wallet = activeUsdWallets.find(
     (item) => item.owner_profile_id === agent.profile_id
@@ -6605,7 +6608,7 @@ setAdminAccountStats({
   totalSupply: Number(supply?.available_supply || 0),
   superAdminAvailable,
   totalSpendable,
-  distributed: Number(supply?.allocated_supply || 0),
+  distributed: Number(mainSupply?.network_unburned || 0),
   agentAvailable,
   agentExposure,
   customerAvailable,
