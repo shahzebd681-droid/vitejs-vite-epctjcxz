@@ -1243,6 +1243,16 @@ const allocateVirtualUsdToAgent = async () => {
 
 
 
+const getCurrentSuperAdminMainSupply = async () => {
+  const { data, error } = await supabase.rpc("get_super_admin_virtual_usd_supply");
+
+  if (error) throw error;
+
+  const supply = Array.isArray(data) ? data[0] : data;
+
+  return Number(supply?.available_supply || 0);
+};
+
 const withdrawVirtualUsdFromAgent = async () => {
   setAdminLoading(true);
   setAdminError("");
@@ -1289,10 +1299,12 @@ const withdrawVirtualUsdFromAgent = async () => {
       throw new Error("Withdrawal completed but no result was returned.");
     }
 
+    const currentMainSupply = await getCurrentSuperAdminMainSupply();
+
     setAllocationAmount("");
     setAllocationNote("");
     setAdminSuccess(
-      `Virtual USD withdrawn successfully. $${amount.toFixed(2)} returned from ${selectedAgent.username || selectedAgent.agent_code} to Super Admin supply. Agent balance: $${Number(result.agent_balance || 0).toFixed(2)}. Super Admin Available Supply: $${Number(result.super_admin_available_supply || 0).toFixed(2)}.`
+      `Virtual USD withdrawn successfully. $${amount.toFixed(2)} returned from ${selectedAgent.username || selectedAgent.agent_code} to Super Admin supply. Agent balance: $${Number(result.agent_balance || 0).toFixed(2)}. Super Admin Available Supply: $${currentMainSupply.toFixed(2)}.`
     );
 
     await loadSuperAdminDashboard();
@@ -6651,11 +6663,13 @@ const transferSuperAdminOnlineCustomer = async (direction: "SUPER_ADMIN_TO_CUSTO
       throw new Error("Transfer completed but no result was returned.");
     }
 
+    const currentMainSupply = await getCurrentSuperAdminMainSupply();
+
     setOnlineCoinAmount("");
     const successMessage =
       direction === "SUPER_ADMIN_TO_CUSTOMER"
-        ? `Virtual USD deposited successfully. $${amount.toFixed(2)} sent to the Online Customer. Super Admin Available Supply: $${Number(result.super_admin_available_supply || 0).toFixed(2)}.`
-        : `Virtual USD withdrawn successfully. $${amount.toFixed(2)} returned from the Online Customer. Super Admin Available Supply: $${Number(result.super_admin_available_supply || 0).toFixed(2)}.`;
+        ? `Virtual USD deposited successfully. $${amount.toFixed(2)} sent to the Online Customer. Super Admin Available Supply: $${currentMainSupply.toFixed(2)}.`
+        : `Virtual USD withdrawn successfully. $${amount.toFixed(2)} returned from the Online Customer. Super Admin Available Supply: $${currentMainSupply.toFixed(2)}.`;
 
     await loadSuperAdminDashboard();
     setAdminSuccess(successMessage);
