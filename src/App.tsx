@@ -7522,21 +7522,21 @@ disabled={adminModule === "HOME" && adminLoading}
 <div className="admin-stat-card"><span>SUPER ADMIN AVAILABLE</span><strong className="admin-available-value">${adminStats.available.toFixed(2)}</strong></div>
 <div className="admin-stat-card"><span>NETWORK EXPOSURE</span><strong className="admin-exposure-value">${adminStats.exposure.toFixed(2)}</strong></div>
 </section>
-<section className="admin-module-grid">
-<button className="admin-module-card" onClick={()=>{setAdminModule("ACCOUNT_OVERVIEW");setAdminError("");setAdminSuccess("");}}><b>Account Overview</b><small>Virtual USD supply & balances</small></button>
+<section className="admin-module-grid admin-home-modules">
+<button className="admin-module-card" onClick={()=>{setAdminModule("ACCOUNT_OVERVIEW");setAdminError("");setAdminSuccess("");}}><b>Account Overview</b><small>Supply, network balances & exposure</small></button>
 <button className="admin-module-card" onClick={()=>{setAdminModule("CONTACT");setAdminError("");setAdminSuccess("");void loadContactSettings();}}><b>Contact</b><small>WhatsApp & Telegram links</small></button>
 <button className="admin-module-card" onClick={()=>{setAdminModule("ACCOUNT_DIRECTORY");setSuperAdminAccountView(null);setSuperAdminAccountSearch("");setSuperAdminAccountPage(1);setSelectedAdminAccount(null);setAdminError("");setAdminSuccess("");}}><b>Customer & Admin All Accounts</b><small>Customer accounts and Agent Admin accounts</small></button>
 <button className="admin-module-card" onClick={()=>{setAdminModule("AGENT_WALLET");setAgentWalletAction(null);setAllocationAgentProfileId("");setAllocationAmount("");setAllocationNote("");setAdminError("");}}><b>Agent Wallet</b><small>Deposit / withdraw virtual USD</small></button>
 <button className="admin-module-card" onClick={()=>{setAdminModule("ONLINE_CUSTOMER");setAdminError("");setOnlineCoinCustomerId("");setOnlineCoinAmount("");}}><b>Online Customer Wallet</b><small>Deposit / withdraw virtual USD</small></button>
-<button className="admin-module-card" onClick={()=>{setAdminModule("AGENT_ADMIN");setAdminError("");}}><b>Agent Admin</b><small>Create & manage agents</small></button>
+<button className="admin-module-card" onClick={()=>{setAdminModule("AGENT_ADMIN");setAdminError("");}}><b>Agent Admin</b><small>Create Agent Admin accounts</small></button>
 <button className="admin-module-card" onClick={()=>{setAdminModule("RESULTS");setResultGameId("");setResultDate("");setResultSessionId("");setResultSingleDigit("");setResultPatti("");setResultCurrent(null);setAdminError("");setAdminSuccess("");void loadResultsModule();}}><b>Results</b><small>Declare game results</small></button>
-{[["Settlement","Settle market / Bazi"],["Bet Analyzer","Single / Patti / Jodi analysis"],["Reports","Statements & PDF export"],["Audit","Traceable activity history"]].map(([title,sub])=><button key={title} className="admin-module-card" onClick={()=>{if(title==="Settlement"){setAdminModule("SETTLEMENT");setAdminError("");setAdminSuccess("");void loadSettlementModule();}else if(title==="Bet Analyzer"){setAdminModule("BET_ANALYZER");setBetAnalyzerView("HOME");setBetAnalyzerRows([]);setAdminError("");setAdminSuccess("");void loadBetAnalyzerSessions();}else if(title==="Reports"){setAdminModule("REPORTS");setReportsRows([]);setReportsPage(0);setReportsTotal(0);setAdminError("");setAdminSuccess("");void loadSuperAdminReports(0);}else if(title==="Audit"){setAdminModule("AUDIT");setAuditRows([]);setAuditPage(0);setAuditHasNext(false);setAdminError("");setAdminSuccess("");void loadAuditModule(0);}else setAdminError(`${title} module is the next build step.`);}}><b>{title}</b><small>{sub}</small></button>)}
+{[["Settlement","Settle market / Bazi"],["Bet Analyzer","Single / Patti / Jodi analysis"],["Reports","Betting activity reports"],["Audit","Traceable activity history"]].map(([title,sub])=><button key={title} className="admin-module-card" onClick={()=>{if(title==="Settlement"){setAdminModule("SETTLEMENT");setAdminError("");setAdminSuccess("");void loadSettlementModule();}else if(title==="Bet Analyzer"){setAdminModule("BET_ANALYZER");setBetAnalyzerView("HOME");setBetAnalyzerRows([]);setAdminError("");setAdminSuccess("");void loadBetAnalyzerSessions();}else if(title==="Reports"){setAdminModule("REPORTS");setReportsRows([]);setReportsPage(0);setReportsTotal(0);setAdminError("");setAdminSuccess("");void loadSuperAdminReports(0);}else if(title==="Audit"){setAdminModule("AUDIT");setAuditRows([]);setAuditPage(0);setAuditHasNext(false);setAdminError("");setAdminSuccess("");void loadAuditModule(0);}else setAdminError(`${title} module is the next build step.`);}}><b>{title}</b><small>{sub}</small></button>)}
 </section>
 <section className="admin-supply-card">
 <div className="admin-section-kicker">VIRTUAL COIN CONTROL</div>
 <h2>Super Admin Supply Target</h2>
 <p>
-Initial target supply: <b>1,000,000 virtual USD coins</b>. Use the Deposit and Withdraw module cards for Agent account transfers.
+Target supply: <b>1,000,000 virtual USD coins</b>. Use the Agent Wallet and Online Customer Wallet modules for account transfers.
 </p>
 </section>
 </>
@@ -8362,16 +8362,15 @@ WITHDRAW VIRTUAL USD
 <section className="admin-panel-card admin-account-detail-panel">
   <div className="admin-section-kicker">ACCOUNT MANAGEMENT</div>
   <div className="admin-panel-title">VIRTUAL USD SUPPLY & ACCOUNT OVERVIEW</div>
-  <p className="admin-account-detail-intro">Complete view of system supply, distributed virtual USD, Agent balances, Customer balances and exposure.</p>
+  <p className="admin-account-detail-intro">Current supply, network balances and customer exposure overview.</p>
 
   <div className="admin-account-grid admin-account-grid-detail">
-    <div className="admin-account-card primary"><span>SUPER ADMIN AVAILABLE</span><strong className="admin-available-value">${adminAccountStats.superAdminAvailable.toFixed(2)}</strong><small>Remaining operating supply</small></div>
-    <div className="admin-account-card"><span>DISTRIBUTED TO NETWORK</span><strong>${adminAccountStats.distributed.toFixed(2)}</strong><small>Existing supply allocation</small></div>
+    <div className="admin-account-card primary"><span>SUPER ADMIN AVAILABLE</span><strong className="admin-available-value">${adminAccountStats.superAdminAvailable.toFixed(2)}</strong><small>Current main supply available to Super Admin</small></div>
+    <div className="admin-account-card"><span>DISTRIBUTED TO NETWORK</span><strong>${adminAccountStats.distributed.toFixed(2)}</strong><small>Current unburned supply held by the network</small></div>
     <div className="admin-account-card"><span>AGENT AVAILABLE</span><strong className="admin-available-value">${adminAccountStats.agentAvailable.toFixed(2)}</strong><small>Agent wallet balances</small></div>
-    <div className="admin-account-card"><span>CUSTOMER AVAILABLE</span><strong className="admin-available-value">${adminAccountStats.customerAvailable.toFixed(2)}</strong><small>All customer wallet balances</small></div>
-    <div className="admin-account-card"><span>CUSTOMER EXPOSURE</span><strong className="admin-exposure-value">${adminAccountStats.customerExposure.toFixed(2)}</strong><small>All customer exposure</small></div>
-    <div className="admin-account-card highlight"><span>TOTAL NETWORK AVAILABLE</span><strong className="admin-available-value">${adminAccountStats.networkAvailable.toFixed(2)}</strong><small>Agents + Customers</small></div>
-    <div className="admin-account-card highlight"><span>SUPPLY CHANGE</span><strong>{adminAccountStats.supplyChange == null ? "VERIFY" : `${adminAccountStats.supplyChange >= 0 ? "+" : ""}$${adminAccountStats.supplyChange.toFixed(2)}`}</strong><small>Actual burn and refill accounting</small></div>
+    <div className="admin-account-card"><span>CUSTOMER AVAILABLE</span><strong className="admin-available-value">${adminAccountStats.customerAvailable.toFixed(2)}</strong><small>Active customer wallet balances</small></div>
+    <div className="admin-account-card"><span>CUSTOMER EXPOSURE</span><strong className="admin-exposure-value">${adminAccountStats.customerExposure.toFixed(2)}</strong><small>All Agent Customer + Online Customer exposure</small></div>
+    <div className="admin-account-card highlight"><span>SUPPLY CHANGE</span><strong>{adminAccountStats.supplyChange == null ? "VERIFY" : `${adminAccountStats.supplyChange >= 0 ? "+" : ""}$${adminAccountStats.supplyChange.toFixed(2)}`}</strong><small>Net betting-generated supply change</small></div>
   </div>
 
 </section>
@@ -13892,6 +13891,574 @@ color: #111;
   .deadline,.customer-deadline{font-size:10px;}
   .bazi-name,.customer-bazi-number{font-size:12px;}
   .bazi-time,.customer-bazi-time{font-size:9px;}
+}
+
+
+/* =========================================================
+   APNA MATKA SUPER ADMIN — PREMIUM CONTROL PANEL UI
+   Visual-only layer. Existing functionality and calculations
+   remain unchanged except for the explicitly requested card
+   removal/text corrections above.
+   ========================================================= */
+
+.admin-shell{
+  background:
+    radial-gradient(circle at 8% 0%, rgba(255,205,55,.12), transparent 24%),
+    radial-gradient(circle at 94% 14%, rgba(0,135,255,.06), transparent 22%),
+    linear-gradient(135deg, rgba(255,193,7,.035) 0 1px, transparent 1px 58px),
+    linear-gradient(315deg, rgba(255,193,7,.025) 0 1px, transparent 1px 72px),
+    linear-gradient(180deg,#030507 0%,#070b11 48%,#020305 100%);
+}
+
+.admin-header{
+  position:relative;
+  padding:15px 14px 13px;
+  border-bottom:1px solid rgba(255,195,0,.34);
+  background:
+    radial-gradient(circle at 10% 0%, rgba(255,193,7,.12), transparent 28%),
+    linear-gradient(180deg,#0b0f15 0%,#05080d 100%);
+  box-shadow:0 8px 30px rgba(0,0,0,.28);
+}
+
+.admin-brand{
+  position:relative;
+  padding-left:39px;
+  font-size:21px;
+  letter-spacing:1.4px;
+  text-shadow:0 0 18px rgba(255,200,45,.16);
+}
+
+.admin-brand::before{
+  content:"♛";
+  position:absolute;
+  left:0;
+  top:50%;
+  transform:translateY(-52%);
+  width:31px;
+  height:31px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:50%;
+  color:#ffd33d;
+  background:radial-gradient(circle,#2b210b 0%,#0c0e12 68%);
+  border:1px solid rgba(255,205,55,.42);
+  box-shadow:0 0 16px rgba(255,193,7,.12), inset 0 0 12px rgba(255,193,7,.08);
+  font-size:20px;
+}
+
+.admin-subtitle{
+  margin-top:5px;
+  font-size:7px;
+  letter-spacing:1.25px;
+  color:#c2a84f;
+}
+
+.admin-header-actions{
+  gap:7px;
+}
+
+.admin-role-badge,
+.admin-logout-btn{
+  min-height:34px;
+  border-radius:9px;
+}
+
+.admin-role-badge{
+  padding:0 10px;
+  display:flex;
+  align-items:center;
+  border-color:rgba(255,205,55,.58);
+  background:linear-gradient(145deg,#17150d,#0b0e13);
+  box-shadow:inset 0 0 15px rgba(255,193,7,.04);
+}
+
+.admin-logout-btn{
+  padding:0 11px;
+  background:linear-gradient(145deg,#8e2029,#bd2933);
+  box-shadow:0 5px 14px rgba(170,25,35,.18);
+}
+
+.admin-main{
+  max-width:980px;
+  padding:14px;
+}
+
+.admin-welcome-card,
+.admin-panel-card,
+.admin-supply-card{
+  position:relative;
+  overflow:hidden;
+  border:1px solid rgba(255,198,40,.32);
+  border-radius:15px;
+  background:
+    radial-gradient(circle at 88% 10%, rgba(255,193,7,.08), transparent 28%),
+    linear-gradient(145deg,rgba(18,23,30,.98),rgba(5,8,13,.98));
+  box-shadow:
+    0 12px 30px rgba(0,0,0,.24),
+    inset 0 0 28px rgba(255,193,7,.018);
+}
+
+.admin-welcome-card::before,
+.admin-panel-card::before,
+.admin-supply-card::before{
+  content:"";
+  position:absolute;
+  left:0;
+  top:0;
+  bottom:0;
+  width:3px;
+  background:linear-gradient(180deg,#ffe36a,#d99c00,transparent);
+  opacity:.9;
+}
+
+.admin-welcome-card{
+  min-height:104px;
+  padding:18px 16px;
+  border-color:rgba(255,198,40,.48);
+}
+
+.admin-welcome-card h1{
+  font-size:22px;
+  letter-spacing:-.3px;
+}
+
+.admin-welcome-card p{
+  font-size:9px;
+  color:#aeb4bd;
+}
+
+.admin-section-kicker{
+  color:#d7b83e;
+  font-size:7px;
+  letter-spacing:1.5px;
+}
+
+.admin-refresh-btn,
+.admin-small-action{
+  min-height:34px;
+  border-radius:9px;
+  border:1px solid rgba(255,202,47,.58);
+  background:linear-gradient(145deg,#17150d,#0b0e13);
+  color:#ffd43d;
+  box-shadow:inset 0 0 12px rgba(255,193,7,.035);
+  transition:transform .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+
+.admin-refresh-btn{
+  min-width:88px;
+}
+
+.admin-refresh-btn:hover,
+.admin-small-action:hover{
+  border-color:rgba(255,218,90,.9);
+  box-shadow:0 0 16px rgba(255,193,7,.10), inset 0 0 12px rgba(255,193,7,.05);
+}
+
+.admin-refresh-btn:active,
+.admin-small-action:active{
+  transform:translateY(1px);
+}
+
+.admin-stat-grid{
+  gap:9px;
+  margin-bottom:12px;
+}
+
+.admin-stat-card{
+  position:relative;
+  overflow:hidden;
+  min-height:92px;
+  padding:13px;
+  border-radius:13px;
+  border:1px solid rgba(255,255,255,.10);
+  background:
+    radial-gradient(circle at 90% 0%, rgba(255,193,7,.08), transparent 34%),
+    linear-gradient(145deg,#10151c,#070a0f);
+  box-shadow:0 7px 22px rgba(0,0,0,.20), inset 0 0 20px rgba(255,255,255,.012);
+}
+
+.admin-stat-card::after{
+  content:"";
+  position:absolute;
+  right:10px;
+  bottom:9px;
+  width:30px;
+  height:30px;
+  border-radius:50%;
+  border:1px solid rgba(255,203,55,.12);
+  box-shadow:0 0 18px rgba(255,193,7,.05);
+}
+
+.admin-stat-card:nth-child(1){border-color:rgba(255,195,0,.28);}
+.admin-stat-card:nth-child(2){border-color:rgba(75,160,255,.24);}
+.admin-stat-card:nth-child(3){border-color:rgba(0,220,120,.22);}
+.admin-stat-card:nth-child(4){border-color:rgba(255,195,0,.34);}
+.admin-stat-card:nth-child(5){border-color:rgba(255,80,95,.28);}
+
+.admin-stat-card span{
+  color:#858b95;
+  font-size:6.5px;
+  letter-spacing:1px;
+}
+
+.admin-stat-card strong{
+  font-size:18px;
+}
+
+.admin-stat-card:last-child{
+  grid-column:1 / -1;
+}
+
+.admin-module-grid{
+  gap:9px;
+  margin-bottom:12px;
+}
+
+.admin-home-modules{
+  padding:14px;
+  border:1px solid rgba(255,198,40,.24);
+  border-radius:15px;
+  background:linear-gradient(145deg,rgba(16,21,28,.94),rgba(6,9,13,.94));
+  box-shadow:0 10px 26px rgba(0,0,0,.18), inset 0 0 24px rgba(255,193,7,.015);
+}
+
+.admin-home-modules::before{
+  content:"QUICK ACCESS MODULES";
+  grid-column:1 / -1;
+  display:block;
+  padding:1px 0 3px 10px;
+  border-left:3px solid #ffd43d;
+  color:#ffd43d;
+  font-size:11px;
+  font-weight:900;
+  letter-spacing:.8px;
+}
+
+.admin-home-modules::after{
+  content:"Manage your platform efficiently";
+  grid-column:1 / -1;
+  display:block;
+  grid-row:2;
+  margin-top:-7px;
+  padding-left:13px;
+  color:#737b86;
+  font-size:7px;
+}
+
+.admin-home-modules .admin-module-card{
+  grid-row:auto;
+}
+
+.admin-module-card{
+  position:relative;
+  min-height:76px;
+  padding:13px 40px 13px 13px;
+  overflow:hidden;
+  border-radius:12px;
+  border:1px solid rgba(255,255,255,.10);
+  background:
+    radial-gradient(circle at 96% 0%, rgba(255,193,7,.08), transparent 32%),
+    linear-gradient(145deg,#11161d,#080b10);
+  box-shadow:0 7px 18px rgba(0,0,0,.18), inset 0 0 18px rgba(255,193,7,.012);
+  transition:transform .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+
+.admin-module-card::after{
+  content:"›";
+  position:absolute;
+  right:11px;
+  top:50%;
+  transform:translateY(-50%);
+  width:26px;
+  height:26px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:50%;
+  border:1px solid rgba(255,205,55,.68);
+  color:#ffd43d;
+  background:#0b0d12;
+  font-size:20px;
+  line-height:1;
+}
+
+.admin-module-card:hover{
+  transform:translateY(-1px);
+  border-color:rgba(255,205,55,.42);
+  box-shadow:0 10px 22px rgba(0,0,0,.25), 0 0 16px rgba(255,193,7,.05);
+}
+
+.admin-module-card.active{
+  border-color:rgba(255,205,55,.66);
+  background:
+    radial-gradient(circle at 96% 0%, rgba(255,193,7,.12), transparent 34%),
+    linear-gradient(145deg,#17150d,#090c11);
+}
+
+.admin-module-card b{
+  font-size:10px;
+  color:#f5d04d;
+}
+
+.admin-module-card small{
+  color:#8d949e;
+  font-size:7.5px;
+  line-height:1.45;
+}
+
+.admin-supply-card{
+  min-height:110px;
+  padding:17px;
+  border-color:rgba(255,198,40,.42);
+  background:
+    radial-gradient(circle at 90% 50%, rgba(255,193,7,.12), transparent 28%),
+    linear-gradient(145deg,#11140f,#06090d);
+}
+
+.admin-supply-card::after{
+  content:"◎";
+  position:absolute;
+  right:20px;
+  top:50%;
+  transform:translateY(-50%);
+  color:#ffd43d;
+  font-size:54px;
+  opacity:.10;
+}
+
+.admin-supply-card h2{
+  font-size:21px;
+}
+
+.admin-supply-card p{
+  font-size:8.5px;
+  max-width:760px;
+}
+
+.admin-panel-card{
+  padding:17px;
+  margin-bottom:12px;
+}
+
+.admin-panel-title{
+  font-size:11px;
+  letter-spacing:.4px;
+  color:#ffd43d;
+}
+
+.admin-panel-title-row{
+  padding-bottom:10px;
+  border-bottom:1px solid rgba(255,195,0,.10);
+}
+
+.admin-account-detail-panel{
+  padding:17px;
+}
+
+.admin-account-detail-intro{
+  color:#929aa5;
+  font-size:8.5px;
+}
+
+.admin-account-grid-detail{
+  gap:9px;
+}
+
+.admin-account-card{
+  position:relative;
+  overflow:hidden;
+  min-height:92px;
+  padding:13px;
+  border-radius:12px;
+  border:1px solid rgba(255,255,255,.10);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(255,193,7,.07), transparent 36%),
+    linear-gradient(145deg,#10151c,#070a0f);
+  box-shadow:0 7px 18px rgba(0,0,0,.18), inset 0 0 18px rgba(255,255,255,.01);
+}
+
+.admin-account-card::after{
+  content:"";
+  position:absolute;
+  right:10px;
+  top:10px;
+  width:24px;
+  height:24px;
+  border-radius:50%;
+  border:1px solid rgba(255,205,55,.12);
+}
+
+.admin-account-card.primary{
+  border-color:rgba(255,198,40,.58);
+  background:
+    radial-gradient(circle at 92% 8%, rgba(255,193,7,.13), transparent 38%),
+    linear-gradient(145deg,#17150d,#090c11);
+}
+
+.admin-account-card.highlight{
+  border-color:rgba(255,198,40,.34);
+}
+
+.admin-account-card span{
+  font-size:6.5px;
+  letter-spacing:1px;
+  color:#858b95;
+}
+
+.admin-account-card strong{
+  font-size:17px;
+}
+
+.admin-account-card small{
+  font-size:7px;
+  color:#737b86;
+}
+
+.admin-account-grid-detail .admin-account-card:last-child{
+  grid-column:1 / -1;
+}
+
+.admin-form{
+  gap:11px;
+}
+
+.admin-form-field label{
+  color:#858c96;
+  font-size:7px;
+}
+
+.admin-form-input{
+  height:43px;
+  border-radius:9px;
+  border-color:#252d38;
+  background:linear-gradient(145deg,#090d13,#06090d);
+  box-shadow:inset 0 0 14px rgba(0,0,0,.25);
+}
+
+.admin-form-input:focus{
+  border-color:rgba(255,205,55,.72);
+  box-shadow:0 0 0 2px rgba(255,193,7,.06), inset 0 0 14px rgba(255,193,7,.025);
+}
+
+.admin-form-note{
+  border:1px solid rgba(255,255,255,.07);
+  background:linear-gradient(145deg,#0c1118,#080b10);
+  color:#858c96;
+}
+
+.admin-create-btn{
+  height:43px;
+  border-radius:9px;
+  background:linear-gradient(135deg,#ffe36a,#ffba18);
+  color:#111;
+  border-color:#ffd43d;
+  box-shadow:0 7px 18px rgba(255,190,20,.10);
+}
+
+.admin-empty{
+  border:1px solid rgba(255,255,255,.07);
+  background:linear-gradient(145deg,#0c1118,#080b10);
+  color:#7d858f;
+}
+
+.admin-agent-row,
+.admin-wallet-result-row{
+  padding:11px;
+  border-radius:10px;
+  border-color:rgba(255,255,255,.09);
+  background:linear-gradient(145deg,#0d1219,#080b10);
+}
+
+.admin-agent-row b,
+.admin-wallet-result-row b{
+  font-size:9px;
+}
+
+.admin-status{
+  border:1px solid rgba(255,75,85,.22);
+}
+
+.admin-status.active{
+  border:1px solid rgba(70,235,140,.22);
+}
+
+.reports-table-scroll{
+  border-color:rgba(255,198,40,.18);
+  background:#06090d;
+  box-shadow:inset 0 0 22px rgba(255,193,7,.018);
+}
+
+.reports-table th{
+  background:linear-gradient(180deg,#1a160d,#100f0c);
+  color:#ffd43d;
+}
+
+.reports-table td{
+  background:rgba(7,10,15,.88);
+}
+
+.admin-pagination{
+  padding-top:2px;
+}
+
+@media (max-width:560px){
+  .admin-header{
+    padding:14px 10px 12px;
+  }
+
+  .admin-brand{
+    font-size:20px;
+    padding-left:36px;
+  }
+
+  .admin-brand::before{
+    width:29px;
+    height:29px;
+    font-size:18px;
+  }
+
+  .admin-main{
+    padding:12px 10px 24px;
+  }
+
+  .admin-welcome-card{
+    padding:16px 13px;
+  }
+
+  .admin-welcome-card h1{
+    font-size:20px;
+  }
+
+  .admin-module-card{
+    min-height:72px;
+  }
+}
+
+@media (max-width:390px){
+  .admin-brand{
+    font-size:18px;
+    padding-left:33px;
+  }
+
+  .admin-brand::before{
+    width:27px;
+    height:27px;
+    font-size:17px;
+  }
+
+  .admin-role-badge{
+    padding:0 8px;
+  }
+
+  .admin-logout-btn{
+    padding:0 9px;
+  }
+
+  .admin-main{
+    padding-left:8px;
+    padding-right:8px;
+  }
 }
 
 `}</style>
