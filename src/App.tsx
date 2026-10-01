@@ -802,7 +802,6 @@ const [passwordResetError, setPasswordResetError] = useState("");
 const [passwordResetSuccess, setPasswordResetSuccess] = useState("");
 const [adminPasswordResetTarget, setAdminPasswordResetTarget] = useState("");
 const [adminPasswordResetPassword, setAdminPasswordResetPassword] = useState("");
-const [adminPasswordResetLoading, setAdminPasswordResetLoading] = useState(false);
 
 
 
@@ -2662,27 +2661,6 @@ await loadTodayPlayableSessions(getLocalDateString());
 await loadTodayGameResults();
 };
 
-const loadAuthenticatedAccount = async (user: { id: string; email?: string | null; user_metadata?: Record<string, unknown> }) => {
-const { data: profileRows, error: profileError } = await supabase.rpc("get_my_profile");
-if (profileError) throw profileError;
-const profile = Array.isArray(profileRows) ? profileRows[0] : profileRows;
-if (!profile) throw new Error("Profile was not found for the signed-in user.");
-if (profile.status !== "ACTIVE") throw new Error("INACTIVE_ACCOUNT");
-if (profile.role === "SUPER_ADMIN") {
-  setUserRole("SUPER_ADMIN");
-  await loadSuperAdminDashboard();
-  return;
-}
-if (profile.role === "AGENT_ADMIN") {
-  setUserRole("AGENT_ADMIN");
-  await loadAgentCustomerPage(1);
-  return;
-}
-setUserRole("CUSTOMER");
-await loadCustomerAccount(user.id);
-await loadTodayPlayableSessions(getLocalDateString());
-await loadTodayGameResults();
-};
 
 useEffect(() => {
 let mounted = true;
