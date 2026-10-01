@@ -1819,25 +1819,10 @@ const loadTodayGameResults = async () => {
           Boolean(row?.session_id)
       );
 
-    const normalizedSessionIds = normalized.map((row) => row.session_id).filter(Boolean);
-    let todaySessionIds = new Set<string>();
-
-    if (normalizedSessionIds.length > 0) {
-      const { data: resultSessions, error: resultSessionsError } = await supabase
-        .from("game_sessions")
-        .select("id, session_date")
-        .in("id", normalizedSessionIds);
-
-      if (resultSessionsError) throw resultSessionsError;
-
-      todaySessionIds = new Set(
-        (resultSessions || [])
-          .filter((session) => String(session.session_date || "") === resultTodayDate)
-          .map((session) => String(session.id))
-      );
-    }
-
-    const todayNormalized = normalized.filter((row) => todaySessionIds.has(row.session_id));
+    // get_public_today_game_results() already filters to today's playable
+    // declared sessions server-side. Do not query game_sessions again here:
+    // guests may not have direct SELECT access to that table because of RLS.
+    const todayNormalized = normalized;
 
     // Main Bazar follows the overnight cycle. The public "today" RPC only
     // returns today's rows, so when a market has no declared result today,
