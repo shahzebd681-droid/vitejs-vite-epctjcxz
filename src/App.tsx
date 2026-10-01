@@ -816,6 +816,7 @@ const [adminStats, setAdminStats] = useState({ agents: 0, customers: 0, onlineCu
 const [adminAccountStats, setAdminAccountStats] = useState({
   totalSupply: 0,
   superAdminAvailable: 0,
+  totalSpendable: 0,
   distributed: 0,
   agentAvailable: 0,
   agentExposure: 0,
@@ -6575,8 +6576,9 @@ const networkExposure = agentExposure + customerExposure;
 const supply = Array.isArray(supplyResult.data) ? supplyResult.data[0] : supplyResult.data;
 const saBalance = Array.isArray(saBalanceResult.data) ? saBalanceResult.data[0] : saBalanceResult.data;
 const supplyChange = Array.isArray(supplyChangeResult.data) ? supplyChangeResult.data[0] : supplyChangeResult.data;
-const superAdminAvailable =
+const totalSpendable =
   Number(saBalance?.operating_available || 0) + Number(saBalance?.plus_available || 0);
+const superAdminAvailable = Number(supply?.available_supply || 0);
 setAdminAgents((agentsResult.data || []).map((agent) => {
   const wallet = activeUsdWallets.find(
     (item) => item.owner_profile_id === agent.profile_id
@@ -6605,6 +6607,7 @@ setAdminStats({
 setAdminAccountStats({
   totalSupply: Number(supply?.total_supply || 0),
   superAdminAvailable,
+  totalSpendable,
   distributed: Number(supply?.allocated_supply || 0),
   agentAvailable,
   agentExposure,
@@ -8360,7 +8363,8 @@ WITHDRAW VIRTUAL USD
   <p className="admin-account-detail-intro">Complete view of system supply, distributed virtual USD, Agent balances, Customer balances and exposure.</p>
 
   <div className="admin-account-grid admin-account-grid-detail">
-    <div className="admin-account-card primary"><span>SUPER ADMIN AVAILABLE</span><strong className="admin-available-value">${adminAccountStats.superAdminAvailable.toFixed(2)}</strong><small>Operating + Plus spendable balance</small></div>
+    <div className="admin-account-card primary"><span>SUPER ADMIN AVAILABLE</span><strong className="admin-available-value">${adminAccountStats.superAdminAvailable.toFixed(2)}</strong><small>Remaining operating supply</small></div>
+    <div className="admin-account-card"><span>TOTAL SPENDABLE</span><strong className="admin-available-value">${adminAccountStats.totalSpendable.toFixed(2)}</strong><small>Operating + Plus spendable balance</small></div>
     <div className="admin-account-card"><span>DISTRIBUTED TO NETWORK</span><strong>${adminAccountStats.distributed.toFixed(2)}</strong><small>Existing supply allocation</small></div>
     <div className="admin-account-card"><span>AGENT AVAILABLE</span><strong className="admin-available-value">${adminAccountStats.agentAvailable.toFixed(2)}</strong><small>Agent wallet balances</small></div>
     <div className="admin-account-card"><span>CUSTOMER AVAILABLE</span><strong className="admin-available-value">${adminAccountStats.customerAvailable.toFixed(2)}</strong><small>All customer wallet balances</small></div>
@@ -14843,5 +14847,4 @@ onChange={(event) => setConfirmPassword(event.target.value)}
 
 
 export default App;
-
 
