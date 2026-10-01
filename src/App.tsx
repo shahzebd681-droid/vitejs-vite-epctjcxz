@@ -6590,7 +6590,7 @@ setAdminStats({
   exposure: networkExposure,
 });
 setAdminAccountStats({
-  totalSupply: Number(supply?.total_supply || 0),
+  totalSupply: Number(supply?.available_supply || 0),
   superAdminAvailable,
   totalSpendable,
   distributed: Number(supply?.allocated_supply || 0),
@@ -8349,7 +8349,6 @@ WITHDRAW VIRTUAL USD
 
   <div className="admin-account-grid admin-account-grid-detail">
     <div className="admin-account-card primary"><span>SUPER ADMIN AVAILABLE</span><strong className="admin-available-value">${adminAccountStats.superAdminAvailable.toFixed(2)}</strong><small>Remaining operating supply</small></div>
-    <div className="admin-account-card"><span>TOTAL SPENDABLE</span><strong className="admin-available-value">${adminAccountStats.totalSpendable.toFixed(2)}</strong><small>Operating + Plus spendable balance</small></div>
     <div className="admin-account-card"><span>DISTRIBUTED TO NETWORK</span><strong>${adminAccountStats.distributed.toFixed(2)}</strong><small>Existing supply allocation</small></div>
     <div className="admin-account-card"><span>AGENT AVAILABLE</span><strong className="admin-available-value">${adminAccountStats.agentAvailable.toFixed(2)}</strong><small>Agent wallet balances</small></div>
     <div className="admin-account-card"><span>CUSTOMER AVAILABLE</span><strong className="admin-available-value">${adminAccountStats.customerAvailable.toFixed(2)}</strong><small>All customer wallet balances</small></div>
