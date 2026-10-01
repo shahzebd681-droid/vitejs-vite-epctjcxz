@@ -776,6 +776,8 @@ const [showSignup, setShowSignup] = useState(false);
 
 
 const [email, setEmail] = useState("");
+const [loginIdentifier, setLoginIdentifier] = useState("");
+const [signupUsername, setSignupUsername] = useState("");
 
 
 const [name, setName] = useState("");
@@ -791,6 +793,16 @@ const [authMessage, setAuthMessage] = useState("");
 
 
 const [authError, setAuthError] = useState("");
+const [forcePasswordReset, setForcePasswordReset] = useState(false);
+const [passwordResetCurrent, setPasswordResetCurrent] = useState("");
+const [passwordResetNew, setPasswordResetNew] = useState("");
+const [passwordResetConfirm, setPasswordResetConfirm] = useState("");
+const [passwordResetLoading, setPasswordResetLoading] = useState(false);
+const [passwordResetError, setPasswordResetError] = useState("");
+const [passwordResetSuccess, setPasswordResetSuccess] = useState("");
+const [adminPasswordResetTarget, setAdminPasswordResetTarget] = useState("");
+const [adminPasswordResetPassword, setAdminPasswordResetPassword] = useState("");
+const [adminPasswordResetLoading, setAdminPasswordResetLoading] = useState(false);
 
 
 
@@ -869,7 +881,7 @@ const [agentAllCustomerPage, setAgentAllCustomerPage] = useState(1);
 const [selectedAgentCustomer, setSelectedAgentCustomer] = useState<any>(null);
 const [agentAllCustomerLoading, setAgentAllCustomerLoading] = useState(false);
 
-const [adminModule, setAdminModule] = useState<"HOME" | "ACCOUNT_OVERVIEW" | "ACCOUNT_DIRECTORY" | "AGENT_ADMIN" | "AGENT_WALLET" | "DEPOSIT_AGENT" | "WITHDRAW_AGENT" | "ONLINE_CUSTOMER" | "RESULTS" | "SETTLEMENT" | "BET_ANALYZER" | "REPORTS" | "AUDIT" | "CONTACT">("HOME");
+const [adminModule, setAdminModule] = useState<"HOME" | "ACCOUNT_OVERVIEW" | "ACCOUNT_DIRECTORY" | "AGENT_ADMIN" | "AGENT_WALLET" | "DEPOSIT_AGENT" | "WITHDRAW_AGENT" | "ONLINE_CUSTOMER" | "RESULTS" | "SETTLEMENT" | "BET_ANALYZER" | "REPORTS" | "AUDIT" | "CONTACT" | "PASSWORD_RESET">("HOME");
 const [contactWhatsappLink, setContactWhatsappLink] = useState("");
 const [contactTelegramLink, setContactTelegramLink] = useState("");
 const [contactLoading, setContactLoading] = useState(false);
@@ -1006,7 +1018,7 @@ const [agentCustomerEmail, setAgentCustomerEmail] = useState("");
 const [agentCustomerPassword, setAgentCustomerPassword] = useState("");
 const [agentCustomerConfirmPassword, setAgentCustomerConfirmPassword] = useState("");
 const [showAgentCustomerForm, setShowAgentCustomerForm] = useState(false);
-const [agentCoinModule, setAgentCoinModule] = useState<"OVERVIEW" | "DEPOSIT_CUSTOMER" | "WITHDRAW_CUSTOMER" | "CUSTOMER_WALLET_LOOKUP">("OVERVIEW");
+const [agentCoinModule, setAgentCoinModule] = useState<"OVERVIEW" | "DEPOSIT_CUSTOMER" | "WITHDRAW_CUSTOMER" | "CUSTOMER_WALLET_LOOKUP" | "PASSWORD_RESET" | "CHANGE_PASSWORD">("OVERVIEW");
 const [agentCoinCustomerProfileId, setAgentCoinCustomerProfileId] = useState("");
 const [agentCoinAmount, setAgentCoinAmount] = useState("");
 const [agentCoinNote, setAgentCoinNote] = useState("");
@@ -1358,8 +1370,8 @@ const createAgentCustomer = async () => {
   if (username.length < 3 || username.length > 50 || !/^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/.test(username)) {
     return setAgentCustomerError("Username must be 3–50 characters and use only letters, numbers, dot, underscore or hyphen.");
   }
-  if (!fullName) return setAgentCustomerError("Full name is required.");
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return setAgentCustomerError("Please enter a valid email address.");
+  if (fullName.length > 100) return setAgentCustomerError("Full name must be 100 characters or less.");
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return setAgentCustomerError("Please enter a valid email address.");
   if (agentCustomerPassword.length < 8 || agentCustomerPassword.length > 16) return setAgentCustomerError("Password must be 8 to 16 characters.");
   if (agentCustomerPassword !== agentCustomerConfirmPassword) return setAgentCustomerError("Passwords do not match.");
 
@@ -1368,7 +1380,7 @@ const createAgentCustomer = async () => {
     const accessToken = await getFreshAgentAdminAccessToken();
     const { data, error } = await supabase.functions.invoke("agent-customer-admin", {
       headers: { Authorization: `Bearer ${accessToken}` },
-      body: { action: "create", username, full_name: fullName, email, password: agentCustomerPassword },
+      body: { action: "create", username, full_name: fullName || null, email: email || null, password: agentCustomerPassword },
     });
     if (error) throw error;
     if (!data?.success) throw new Error(data?.error || "Unable to create customer account.");
@@ -1555,6 +1567,7 @@ const [customerEmail, setCustomerEmail] = useState("");
 
 
 const [customerProfileId, setCustomerProfileId] = useState<string | null>(null);
+const [showCustomerChangePassword, setShowCustomerChangePassword] = useState(false);
 
 
 const [customerId, setCustomerId] = useState<string | null>(null);
@@ -2191,8 +2204,9 @@ const closeModal = () => {
 setShowLogin(false);
 setShowSignup(false);
 setEmail("");
+setLoginIdentifier("");
+setSignupUsername("");
 setName("");
-setPassword("");
 setConfirmPassword("");
 setAuthMessage("");
 setAuthError("");
@@ -2201,6 +2215,7 @@ setAuthError("");
 const openLogin = () => {
 setShowLogin(true);
 setShowSignup(false);
+setLoginIdentifier("");
 setEmail("");
 setPassword("");
 setAuthMessage("");
@@ -2210,7 +2225,9 @@ setAuthError("");
 const openSignup = () => {
 setShowSignup(true);
 setShowLogin(false);
+setLoginIdentifier("");
 setEmail("");
+setSignupUsername("");
 setName("");
 setPassword("");
 setConfirmPassword("");
@@ -2466,18 +2483,25 @@ const loadCustomerHistoryAndStatement = async (customerId: string, walletId: str
 const createAccount = async () => {
 setAuthError("");
 setAuthMessage("");
+const cleanUsername = signupUsername.trim().toLowerCase();
 const cleanEmail = email.trim().toLowerCase();
 
-if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+if (!cleanUsername) {
+setAuthError("Username is required.");
+return;
+}
+if (cleanUsername.length < 3 || cleanUsername.length > 50 || !/^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/.test(cleanUsername)) {
+setAuthError("Username must be 3–50 characters and use only letters, numbers, dot, underscore or hyphen.");
+return;
+}
+if (!cleanEmail || !/^\S+@\S+\.\S+$/.test(cleanEmail)) {
 setAuthError("Please enter a valid email address.");
 return;
 }
-
 if (password.length < 8 || password.length > 16) {
 setAuthError("Password must be 8 to 16 characters.");
 return;
 }
-
 if (password !== confirmPassword) {
 setAuthError("Passwords do not match.");
 return;
@@ -2487,7 +2511,7 @@ const { error } = await supabase.auth.signUp({
 email: cleanEmail,
 password,
 options: {
- data: { full_name: name.trim() || null },
+ data: { username: cleanUsername, full_name: name.trim() || null, role: "CUSTOMER" },
 },
 });
 
@@ -2502,10 +2526,10 @@ setAuthMessage("Account created. Please check your email and confirm your email 
 const loginUser = async () => {
 setAuthError("");
 setAuthMessage("");
-const cleanEmail = email.trim().toLowerCase();
+const identifier = loginIdentifier.trim().toLowerCase();
 
-if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
-setAuthError("Please enter a valid email address.");
+if (!identifier) {
+setAuthError("Username or email address is required.");
 return;
 }
 
@@ -2514,8 +2538,23 @@ setAuthError("Password must be 8 to 16 characters.");
 return;
 }
 
+const { data: resolvedEmail, error: resolveError } = await supabase.rpc("resolve_login_email", {
+  p_login: identifier,
+});
+
+if (resolveError) {
+setAuthError(resolveError.message === "LOGIN_ACCOUNT_NOT_FOUND" ? "Username or email address was not found." : resolveError.message);
+return;
+}
+
+const authEmail = String(Array.isArray(resolvedEmail) ? resolvedEmail[0] : resolvedEmail || "").trim().toLowerCase();
+if (!authEmail) {
+setAuthError("Unable to resolve the login account.");
+return;
+}
+
 const { data, error } = await supabase.auth.signInWithPassword({
-email: cleanEmail,
+email: authEmail,
 password,
 });
 
@@ -2532,7 +2571,7 @@ name.trim() ||
 user?.email?.split("@")[0] ||
 "Customer"
 );
-setCustomerEmail(user?.email || cleanEmail);
+setCustomerEmail(user?.email || authEmail);
 
 try {
 await loadAuthenticatedAccount(user);
@@ -2555,10 +2594,72 @@ return;
 
 setShowLogin(false);
 setShowSignup(false);
+setLoginIdentifier("");
 setEmail("");
 setPassword("");
 setAuthMessage("");
 setAuthError("");
+};
+
+const verifyCurrentPasswordAndUpdate = async (force = false) => {
+setPasswordResetError("");
+setPasswordResetSuccess("");
+if (passwordResetLoading) return;
+if (!passwordResetCurrent) return setPasswordResetError("Current Password is required.");
+if (passwordResetNew.length < 8 || passwordResetNew.length > 16) return setPasswordResetError("New Password must be 8 to 16 characters.");
+if (passwordResetNew !== passwordResetConfirm) return setPasswordResetError("New Passwords do not match.");
+if (passwordResetNew === passwordResetCurrent) return setPasswordResetError("New Password must be different from Current Password.");
+
+setPasswordResetLoading(true);
+try {
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError) throw userError;
+  const currentUser = userData.user;
+  if (!currentUser?.email) throw new Error("AUTHENTICATION_REQUIRED");
+
+  const { error: verifyError } = await supabase.auth.signInWithPassword({
+    email: currentUser.email,
+    password: passwordResetCurrent,
+  });
+  if (verifyError) throw new Error("CURRENT_PASSWORD_INVALID");
+
+  const { error: updateError } = await supabase.auth.updateUser({ password: passwordResetNew });
+  if (updateError) throw updateError;
+
+  setPasswordResetCurrent("");
+  setPasswordResetNew("");
+  setPasswordResetConfirm("");
+  setPasswordResetSuccess(force ? "Password updated successfully. You can now continue to your dashboard." : "Password updated successfully.");
+  if (force) setForcePasswordReset(false);
+} catch (error: any) {
+  const message = error?.message || String(error);
+  setPasswordResetError(message === "CURRENT_PASSWORD_INVALID" ? "Current Password is incorrect." : message);
+} finally {
+  setPasswordResetLoading(false);
+}
+};
+
+const loadAuthenticatedAccount = async (user: { id: string; email?: string | null; user_metadata?: Record<string, unknown> }) => {
+const { data: profileRows, error: profileError } = await supabase.rpc("get_my_profile");
+if (profileError) throw profileError;
+const profile = Array.isArray(profileRows) ? profileRows[0] : profileRows;
+if (!profile) throw new Error("Profile was not found for the signed-in user.");
+if (profile.status !== "ACTIVE") throw new Error("INACTIVE_ACCOUNT");
+setForcePasswordReset(Boolean((profile as any).must_change_password));
+if (profile.role === "SUPER_ADMIN") {
+  setUserRole("SUPER_ADMIN");
+  await loadSuperAdminDashboard();
+  return;
+}
+if (profile.role === "AGENT_ADMIN") {
+  setUserRole("AGENT_ADMIN");
+  await loadAgentCustomerPage(1);
+  return;
+}
+setUserRole("CUSTOMER");
+await loadCustomerAccount(user.id);
+await loadTodayPlayableSessions(getLocalDateString());
+await loadTodayGameResults();
 };
 
 const loadAuthenticatedAccount = async (user: { id: string; email?: string | null; user_metadata?: Record<string, unknown> }) => {
@@ -2791,7 +2892,11 @@ await supabase.auth.signOut();
 setIsLoggedIn(false);
 setUserRole(null);
 setAdminError("");
-
+setForcePasswordReset(false);
+setPasswordResetCurrent("");
+setPasswordResetNew("");
+setPasswordResetConfirm("");
+setShowCustomerChangePassword(false);
 
 setCustomerPage("home");
 
@@ -5997,6 +6102,26 @@ Bet History
 
 
 <button
+className="profile-change-password-btn"
+onClick={() => { setShowCustomerChangePassword((value) => !value); setPasswordResetError(""); setPasswordResetSuccess(""); }}
+>
+<span>Change Password</span>
+<span>{showCustomerChangePassword ? "⌃" : "›"}</span>
+</button>
+
+{showCustomerChangePassword ? (
+<div className="profile-change-password-panel">
+  <div className="profile-change-password-title">CHANGE PASSWORD</div>
+  <input className="input" type="password" placeholder="Current Password" value={passwordResetCurrent} onChange={(e)=>setPasswordResetCurrent(e.target.value)} maxLength={16} autoComplete="current-password" />
+  <input className="input" type="password" placeholder="New Password" value={passwordResetNew} onChange={(e)=>setPasswordResetNew(e.target.value)} maxLength={16} autoComplete="new-password" />
+  <input className="input" type="password" placeholder="Repeat New Password" value={passwordResetConfirm} onChange={(e)=>setPasswordResetConfirm(e.target.value)} maxLength={16} autoComplete="new-password" />
+  {passwordResetError ? <div className="otp-error">{passwordResetError}</div> : null}
+  {passwordResetSuccess ? <div className="otp-message">{passwordResetSuccess}</div> : null}
+  <button className="continue" type="button" onClick={()=>void verifyCurrentPasswordAndUpdate(false)} disabled={passwordResetLoading}>{passwordResetLoading ? "UPDATING..." : "UPDATE PASSWORD"}</button>
+</div>
+) : null}
+
+<button
 
 
 className="logout-btn"
@@ -7528,7 +7653,7 @@ const renderSuperAdminArea = () => (
 <section className="admin-welcome-card">
 <div>
 <div className="admin-section-kicker">CONTROL CENTER</div>
-<h1>{adminModule === "AGENT_ADMIN" ? "Agent Admin" : adminModule === "ACCOUNT_OVERVIEW" ? "Account Overview" : adminModule === "ACCOUNT_DIRECTORY" ? "Customer & Admin All Accounts" : adminModule === "AGENT_WALLET" && agentWalletAction === "DEPOSIT" ? "Deposit Virtual USD" : adminModule === "AGENT_WALLET" && agentWalletAction === "WITHDRAW" ? "Withdraw Virtual USD" : adminModule === "AGENT_WALLET" ? "Agent Wallet" : adminModule === "DEPOSIT_AGENT" ? "Deposit Virtual USD" : adminModule === "WITHDRAW_AGENT" ? "Withdraw Virtual USD" : adminModule === "ONLINE_CUSTOMER" ? "Online Customer Wallet" : adminModule === "RESULTS" ? "Results" : adminModule === "SETTLEMENT" ? "Settlement" : adminModule === "BET_ANALYZER" ? "Bet Analyzer" : adminModule === "CONTACT" ? "Contact" : "Super Admin Dashboard"}</h1>
+<h1>{adminModule === "AGENT_ADMIN" ? "Agent Admin" : adminModule === "ACCOUNT_OVERVIEW" ? "Account Overview" : adminModule === "ACCOUNT_DIRECTORY" ? "Customer & Admin All Accounts" : adminModule === "AGENT_WALLET" && agentWalletAction === "DEPOSIT" ? "Deposit Virtual USD" : adminModule === "AGENT_WALLET" && agentWalletAction === "WITHDRAW" ? "Withdraw Virtual USD" : adminModule === "AGENT_WALLET" ? "Agent Wallet" : adminModule === "DEPOSIT_AGENT" ? "Deposit Virtual USD" : adminModule === "WITHDRAW_AGENT" ? "Withdraw Virtual USD" : adminModule === "ONLINE_CUSTOMER" ? "Online Customer Wallet" : adminModule === "RESULTS" ? "Results" : adminModule === "SETTLEMENT" ? "Settlement" : adminModule === "BET_ANALYZER" ? "Bet Analyzer" : adminModule === "CONTACT" ? "Contact" : adminModule === "PASSWORD_RESET" ? "Password Reset" : "Super Admin Dashboard"}</h1>
 <p>
 {adminModule === "AGENT_ADMIN"
   ? "Create and manage Agent Admin accounts."
@@ -7627,6 +7752,7 @@ disabled={adminModule === "HOME" && adminLoading}
 <button className="admin-module-card" onClick={()=>{setAdminModule("AGENT_WALLET");setAgentWalletAction(null);setAllocationAgentProfileId("");setAllocationAmount("");setAllocationNote("");setAdminError("");}}><b>Agent Wallet</b><small>Deposit / withdraw virtual USD</small></button>
 <button className="admin-module-card" onClick={()=>{setAdminModule("ONLINE_CUSTOMER");setAdminError("");setOnlineCoinCustomerId("");setOnlineCoinAmount("");}}><b>Online Customer Wallet</b><small>Deposit / withdraw virtual USD</small></button>
 <button className="admin-module-card" onClick={()=>{setAdminModule("AGENT_ADMIN");setAdminError("");}}><b>Agent Admin</b><small>Create Agent Admin accounts</small></button>
+<button className="admin-module-card" onClick={()=>{setAdminModule("PASSWORD_RESET");setAdminPasswordResetTarget("");setAdminPasswordResetPassword("");setAdminError("");setAdminSuccess("");}}><b>Password Reset</b><small>Agent Admin + Online Customer password reset</small></button>
 <button className="admin-module-card" onClick={()=>{setAdminModule("RESULTS");setResultGameId("");setResultDate("");setResultSessionId("");setResultSingleDigit("");setResultPatti("");setResultCurrent(null);setAdminError("");setAdminSuccess("");void loadResultsModule();}}><b>Results</b><small>Declare game results</small></button>
 {[["Settlement","Settle market / Bazi"],["Bet Analyzer","Single / Patti / Jodi analysis"],["Reports","Betting activity reports"],["Audit","Traceable activity history"]].map(([title,sub])=><button key={title} className="admin-module-card" onClick={()=>{if(title==="Settlement"){setAdminModule("SETTLEMENT");setAdminError("");setAdminSuccess("");void loadSettlementModule();}else if(title==="Bet Analyzer"){setAdminModule("BET_ANALYZER");setBetAnalyzerView("HOME");setBetAnalyzerRows([]);setAdminError("");setAdminSuccess("");void loadBetAnalyzerSessions();}else if(title==="Reports"){setAdminModule("REPORTS");setReportsRows([]);setReportsPage(0);setReportsTotal(0);setAdminError("");setAdminSuccess("");void loadSuperAdminReports(0);}else if(title==="Audit"){setAdminModule("AUDIT");setAuditRows([]);setAuditPage(0);setAuditHasNext(false);setAdminError("");setAdminSuccess("");void loadAuditModule(0);}else setAdminError(`${title} module is the next build step.`);}}><b>{title}</b><small>{sub}</small></button>)}
 </section>
@@ -7638,7 +7764,20 @@ Target supply: <b>1,000,000 virtual USD coins</b>. Use the Agent Wallet and Onli
 </p>
 </section>
 </>
- ) : adminModule === "CONTACT" ? (
+ ) : adminModule === "PASSWORD_RESET" ? (
+<section className="admin-panel-card">
+  <div className="admin-panel-title-row"><div className="admin-panel-title">PASSWORD RESET</div><button className="admin-small-action" type="button" onClick={()=>setAdminModule("HOME")}>BACK</button></div>
+  <div className="admin-module-grid">
+    <button className={`admin-module-card ${superAdminAccountView==="AGENT"?"active":""}`} type="button" onClick={()=>{setSuperAdminAccountView("AGENT");setAdminPasswordResetTarget("");void loadSuperAdminAccountDirectory("AGENT");}}> <b>Admin Agent Password Reset</b><small>Select Agent Admin and set a new password.</small></button>
+    <button className={`admin-module-card ${superAdminAccountView==="CUSTOMER"?"active":""}`} type="button" onClick={()=>{setSuperAdminAccountView("CUSTOMER");setAdminPasswordResetTarget("");void loadSuperAdminAccountDirectory("CUSTOMER");}}> <b>Online Customer Password Reset</b><small>Select only Online Customers and set a new password.</small></button>
+  </div>
+  {superAdminAccountView ? <div className="admin-form">
+    <div className="admin-form-field"><label>{superAdminAccountView==="AGENT"?"AGENT ADMIN":"ONLINE CUSTOMER"}</label><select className="admin-form-input" value={adminPasswordResetTarget} onChange={(e)=>setAdminPasswordResetTarget(e.target.value)}><option value="">Select account</option>{(superAdminAccountView==="AGENT"?superAdminAgentAccounts:superAdminCustomerAccounts.filter((c:any)=>c.source==="ONLINE")).filter((a:any)=>a.status!=="DELETED").map((a:any)=><option key={a.profile_id} value={a.profile_id}>{a.username} — {superAdminAccountView==="AGENT"?a.agent_code:a.customer_code}</option>)}</select></div>
+    <div className="admin-form-field"><label>NEW PASSWORD</label><input className="admin-form-input" type="password" value={adminPasswordResetPassword} onChange={(e)=>setAdminPasswordResetPassword(e.target.value)} maxLength={16} placeholder="8–16 characters" /></div>
+    <div className="admin-form-note">Backend password-reset action will be connected in the next backend step. No password is changed by this UI yet.</div>
+  </div> : null}
+</section>
+) : adminModule === "CONTACT" ? (
 <>
 <section className="admin-panel-card">
   <div className="admin-panel-title">CONTACT SETTINGS</div>
@@ -8508,7 +8647,7 @@ autoComplete="name"
 </div>
 
 <div className="admin-form-field">
-<label>EMAIL</label>
+<label>EMAIL (OPTIONAL)</label>
 <input
 className="admin-form-input"
 type="email"
@@ -8566,13 +8705,13 @@ onClick={() => {
     return;
   }
 
-  if (!agentFullName.trim()) {
-    setAdminError("Full name is required.");
+  if (agentFullName.trim().length > 100) {
+    setAdminError("Full name must be 100 characters or less.");
     return;
   }
 
-  if (!agentEmail.trim()) {
-    setAdminError("Email is required.");
+  if (agentEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(agentEmail.trim())) {
+    setAdminError("Please enter a valid email address.");
     return;
   }
 
@@ -8596,7 +8735,7 @@ onClick={() => {
       body: {
         username: normalizedAgentUsername,
         full_name: agentFullName.trim(),
-        email: agentEmail.trim().toLowerCase(),
+        email: agentEmail.trim() ? agentEmail.trim().toLowerCase() : null,
         password: agentPassword
       }
     });
@@ -8664,6 +8803,28 @@ onClick={() => {
 );
 
 
+const renderForcedPasswordReset = () => (
+<div className="admin-shell">
+  <header className="admin-header"><div><div className="admin-brand">APNA MATKA</div><div className="admin-subtitle">SECURITY CHECK</div></div><div className="admin-header-actions"><span className="admin-role-badge">PASSWORD UPDATE</span></div></header>
+  <main className="admin-main">
+    <section className="admin-welcome-card"><div><div className="admin-section-kicker">FIRST LOGIN</div><h1>Update Your Password</h1><p>Your administrator-created account requires a password update before you can continue.</p></div></section>
+    <section className="admin-panel-card">
+      <div className="admin-panel-title">UPDATE PASSWORD</div>
+      <div className="admin-form">
+        <div className="admin-form-field"><label>CURRENT PASSWORD</label><input className="admin-form-input" type="password" value={passwordResetCurrent} onChange={(e)=>setPasswordResetCurrent(e.target.value)} maxLength={16} autoComplete="current-password" /></div>
+        <div className="admin-form-field"><label>NEW PASSWORD</label><input className="admin-form-input" type="password" value={passwordResetNew} onChange={(e)=>setPasswordResetNew(e.target.value)} maxLength={16} autoComplete="new-password" /></div>
+        <div className="admin-form-field"><label>REPEAT NEW PASSWORD</label><input className="admin-form-input" type="password" value={passwordResetConfirm} onChange={(e)=>setPasswordResetConfirm(e.target.value)} maxLength={16} autoComplete="new-password" /></div>
+        <div className="admin-form-note">New password must be 8–16 characters and must match both new-password fields.</div>
+        {passwordResetError ? <div className="admin-error">{passwordResetError}</div> : null}
+        {passwordResetSuccess ? <div className="admin-success">{passwordResetSuccess}</div> : null}
+        <button className="admin-create-btn" type="button" onClick={()=>void verifyCurrentPasswordAndUpdate(true)} disabled={passwordResetLoading}>{passwordResetLoading ? "UPDATING..." : "UPDATE PASSWORD"}</button>
+        <button className="admin-small-action" type="button" onClick={logoutCustomer} disabled={passwordResetLoading}>LOGOUT</button>
+      </div>
+    </section>
+  </main>
+</div>
+);
+
 const renderAgentAdminArea = () => (
 <div className="admin-shell">
 <header className="admin-header">
@@ -8711,11 +8872,11 @@ const renderAgentAdminArea = () => (
 {showAgentCustomerForm ? (
 <div className="admin-form">
 <div className="admin-form-field"><label>USERNAME</label><input className="admin-form-input" type="text" value={agentCustomerUsername} onChange={(e) => setAgentCustomerUsername(e.target.value.toLowerCase())} placeholder="Enter username" maxLength={50} /></div>
-<div className="admin-form-field"><label>FULL NAME</label><input className="admin-form-input" type="text" value={agentCustomerFullName} onChange={(e) => setAgentCustomerFullName(e.target.value)} placeholder="Enter full name" /></div>
-<div className="admin-form-field"><label>EMAIL</label><input className="admin-form-input" type="email" value={agentCustomerEmail} onChange={(e) => setAgentCustomerEmail(e.target.value)} placeholder="customer@example.com" /></div>
+<div className="admin-form-field"><label>FULL NAME (OPTIONAL)</label><input className="admin-form-input" type="text" value={agentCustomerFullName} onChange={(e) => setAgentCustomerFullName(e.target.value)} placeholder="Enter full name" /></div>
+<div className="admin-form-field"><label>EMAIL (OPTIONAL)</label><input className="admin-form-input" type="email" value={agentCustomerEmail} onChange={(e) => setAgentCustomerEmail(e.target.value)} placeholder="customer@example.com" /></div>
 <div className="admin-form-field"><label>PASSWORD</label><input className="admin-form-input" type="password" value={agentCustomerPassword} onChange={(e) => setAgentCustomerPassword(e.target.value)} placeholder="8–16 characters" maxLength={16} /></div>
 <div className="admin-form-field"><label>CONFIRM PASSWORD</label><input className="admin-form-input" type="password" value={agentCustomerConfirmPassword} onChange={(e) => setAgentCustomerConfirmPassword(e.target.value)} placeholder="Re-enter password" maxLength={16} /></div>
-<div className="admin-form-note">Customer will be created under this Agent Admin. Email is used for authentication.</div>
+<div className="admin-form-note">Customer will be created under this Agent Admin. Email is optional; username and password are required.</div>
 <button className="admin-create-btn" type="button" onClick={createAgentCustomer} disabled={agentCustomerLoading}>{agentCustomerLoading ? "CREATING..." : "CREATE CUSTOMER"}</button>
 </div>
 ) : null}
@@ -8801,6 +8962,26 @@ const renderAgentAdminArea = () => (
   ) : null}
 </section>
 </>
+) : agentCoinModule === "CHANGE_PASSWORD" ? (
+<section className="admin-panel-card">
+  <div className="admin-panel-title-row"><div className="admin-panel-title">CHANGE PASSWORD</div><button className="admin-small-action" type="button" onClick={() => setAgentCoinModule("OVERVIEW")}>BACK</button></div>
+  <div className="admin-form">
+    <div className="admin-form-field"><label>CURRENT PASSWORD</label><input className="admin-form-input" type="password" value={passwordResetCurrent} onChange={(e)=>setPasswordResetCurrent(e.target.value)} maxLength={16} /></div>
+    <div className="admin-form-field"><label>NEW PASSWORD</label><input className="admin-form-input" type="password" value={passwordResetNew} onChange={(e)=>setPasswordResetNew(e.target.value)} maxLength={16} /></div>
+    <div className="admin-form-field"><label>REPEAT NEW PASSWORD</label><input className="admin-form-input" type="password" value={passwordResetConfirm} onChange={(e)=>setPasswordResetConfirm(e.target.value)} maxLength={16} /></div>
+    {passwordResetError ? <div className="admin-error">{passwordResetError}</div> : null}{passwordResetSuccess ? <div className="admin-success">{passwordResetSuccess}</div> : null}
+    <button className="admin-create-btn" type="button" onClick={()=>void verifyCurrentPasswordAndUpdate(false)} disabled={passwordResetLoading}>{passwordResetLoading ? "UPDATING..." : "UPDATE PASSWORD"}</button>
+  </div>
+</section>
+) : agentCoinModule === "PASSWORD_RESET" ? (
+<section className="admin-panel-card">
+  <div className="admin-panel-title-row"><div className="admin-panel-title">CUSTOMER PASSWORD RESET</div><button className="admin-small-action" type="button" onClick={() => setAgentCoinModule("OVERVIEW")}>BACK</button></div>
+  <div className="admin-form">
+    <div className="admin-form-field"><label>CUSTOMER</label><select className="admin-form-input" value={adminPasswordResetTarget} onChange={(e)=>setAdminPasswordResetTarget(e.target.value)}><option value="">Select Customer</option>{agentAllCustomers.filter(c=>c.status==="ACTIVE").map(c=><option key={c.profile_id} value={c.profile_id}>{c.username} — {c.customer_code}</option>)}</select></div>
+    <div className="admin-form-field"><label>NEW PASSWORD</label><input className="admin-form-input" type="password" value={adminPasswordResetPassword} onChange={(e)=>setAdminPasswordResetPassword(e.target.value)} maxLength={16} placeholder="8–16 characters" /></div>
+    <div className="admin-form-note">Backend password-reset action will be connected in the next backend step. No password is changed by this UI yet.</div>
+  </div>
+</section>
 ) : (
 renderAgentCustomerCoinModule()
 )}
@@ -14417,6 +14598,25 @@ color: #111;
   grid-column:1 / -1;
 }
 
+.profile-change-password-panel{
+  margin:10px 0;
+  padding:12px;
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:10px;
+  background:linear-gradient(145deg,#0d1219,#080b10);
+}
+.profile-change-password-title{font-size:10px;letter-spacing:1px;margin-bottom:10px;}
+.profile-change-password-btn{
+  width:100%;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  background:transparent;
+  border:0;
+  color:inherit;
+  padding:14px 0;
+}
+
 .admin-form{
   gap:11px;
 }
@@ -14576,11 +14776,13 @@ LOGGED-IN CUSTOMER
 
 
 {isLoggedIn ? (
-  userRole === "SUPER_ADMIN"
-    ? renderSuperAdminArea()
-    : userRole === "AGENT_ADMIN"
-      ? renderAgentAdminArea()
-      : renderCustomerArea()
+  forcePasswordReset
+    ? renderForcedPasswordReset()
+    : userRole === "SUPER_ADMIN"
+      ? renderSuperAdminArea()
+      : userRole === "AGENT_ADMIN"
+        ? renderAgentAdminArea()
+        : renderCustomerArea()
 ):(
 
 
@@ -15411,11 +15613,11 @@ onClick={(event) =>
 <p>Login to continue to Apna Matka.</p>
 <input
 className="input"
-type="email"
-placeholder="Email Address"
-autoComplete="email"
-value={email}
-onChange={(event) => setEmail(event.target.value)}
+type="text"
+placeholder="Username or Email Address"
+autoComplete="username"
+value={loginIdentifier}
+onChange={(event) => setLoginIdentifier(event.target.value)}
 />
 <input
 className="input"
@@ -15442,7 +15644,16 @@ onChange={(event) => setPassword(event.target.value)}
 {showSignup && (
 <>
 <h2>Create Account</h2>
-<p>Create your Apna Matka account with email and password.</p>
+<p>Create your Apna Matka account with username, email and password.</p>
+<input
+className="input"
+type="text"
+placeholder="Username"
+autoComplete="username"
+value={signupUsername}
+onChange={(event) => setSignupUsername(event.target.value.toLowerCase())}
+maxLength={50}
+/>
 <input
 className="input"
 type="text"
