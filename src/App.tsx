@@ -1739,7 +1739,6 @@ type TodayGameResult = {
 };
 
 const [todayGameResults, setTodayGameResults] = useState<TodayGameResult[]>([]);
-const [todayResultsReady, setTodayResultsReady] = useState(false);
 
 type AppNavigationHistoryState = {
   apnaMatkaNavigation: true;
@@ -2060,11 +2059,9 @@ const loadTodayGameResults = async () => {
     }
 
     setTodayGameResults([...todayNormalized, ...mainBazarFallback]);
-    setTodayResultsReady(true);
   } catch (error) {
     console.error("=== TODAY GAME RESULTS LOAD ERROR ===", error);
     setTodayGameResults([]);
-    setTodayResultsReady(true);
   }
 };
 
@@ -2077,7 +2074,6 @@ useEffect(() => {
 
   // Clear the previous cycle immediately. This prevents a prior-day Main Bazar
   // result from remaining visible while the new 2:00 AM cycle is loading.
-  setTodayResultsReady(false);
   if (mainBazarResultCycleKey === "AFTER_2AM") {
     setTodayGameResults([]);
   }
@@ -2747,7 +2743,6 @@ setAuthReady(true);
 // Re-fetch the public home state after logout. The previous authenticated
 // session can otherwise leave stale session/result data in React state.
 setTodaySessionsReady(false);
-setTodayResultsReady(false);
 void loadTodayPlayableSessions(getLocalDateString());
 void loadTodayGameResults();
 return;
