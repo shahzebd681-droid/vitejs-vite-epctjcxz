@@ -6688,6 +6688,62 @@ const loadAgentBetHistory = async (page = 0) => {
   }
 };
 
+const resetAgentCustomerPassword = async () => {
+  setAgentCustomerError("");
+  setAgentCustomerSuccess("");
+
+  const targetProfileId = String(adminPasswordResetTarget || "").trim();
+  const newPassword = String(adminPasswordResetPassword || "");
+
+  if (!targetProfileId) {
+    setAgentCustomerError("Please select a Customer.");
+    return;
+  }
+
+  if (newPassword.length < 8 || newPassword.length > 16) {
+    setAgentCustomerError("Password must be 8 to 16 characters.");
+    return;
+  }
+
+  const targetCustomer = agentAllCustomers.find(
+    (customer) => String(customer.profile_id) === targetProfileId
+  );
+
+  if (!targetCustomer) {
+    setAgentCustomerError("Selected Customer was not found in your Customer Accounts.");
+    return;
+  }
+
+  setAgentAllCustomerLoading(true);
+
+  try {
+    const accessToken = await getFreshAgentAdminAccessToken();
+
+    const { data, error } = await supabase.functions.invoke("agent-customer-admin", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: {
+        action: "reset_customer_password",
+        profile_id: targetProfileId,
+        password: newPassword,
+      },
+    });
+
+    if (error) throw error;
+    if (!data?.success) {
+      throw new Error(data?.error || "Unable to reset customer password.");
+    }
+
+    setAgentCustomerSuccess(
+      `Customer ${targetCustomer.username} password reset successfully.`
+    );
+    setAdminPasswordResetPassword("");
+  } catch (error: any) {
+    setAgentCustomerError(error?.message || String(error));
+  } finally {
+    setAgentAllCustomerLoading(false);
+  }
+};
+
 const setAgentCustomerAccountStatus = async (account: { profile_id: string; username: string; status: string }) => {
   const nextStatus = account.status === "BLOCKED" ? "ACTIVE" : "BLOCKED";
   if (!window.confirm(`${nextStatus === "BLOCKED" ? "PAUSE" : "RESUME"} Customer "${account.username}"?`)) return;
@@ -9180,8 +9236,9 @@ const renderAgentAdminArea = () => {
               <div className="admin-form">
                 <div className="admin-panel-title-row"><div className="admin-panel-title">CUSTOMER PASSWORD RESET</div><button className="admin-small-action" type="button" onClick={() => setAgentCoinModule("OVERVIEW")}>BACK</button></div>
                 <div className="admin-form-field"><label>CUSTOMER</label><select className="admin-form-input" value={adminPasswordResetTarget} onChange={(e)=>setAdminPasswordResetTarget(e.target.value)}><option value="">Select Customer</option>{agentAllCustomers.filter(c=>c.status==="ACTIVE").map(c=><option key={c.profile_id} value={c.profile_id}>{c.username} — {c.customer_code}</option>)}</select></div>
-                <div className="admin-form-field"><label>NEW PASSWORD</label><input className="admin-form-input" type="password" value={adminPasswordResetPassword} onChange={(e)=>setAdminPasswordResetPassword(e.target.value)} maxLength={16} placeholder="8–16 characters" /></div>
-                <div className="admin-form-note">Customer password reset backend action is not connected yet. This screen does not change any password.</div>
+                <div className="admin-form-field"><label>NEW PASSWORD</label><input className="admin-form-input" type="password" value={adminPasswordResetPassword} onChange={(e)=>setAdminPasswordResetPassword(e.target.value)} maxLength={16} placeholder="8–16 characters" autoComplete="new-password" /></div>
+                <div className="admin-form-note">Set a new 8–16 character password for the selected Customer. The Customer will be required to change it at next login.</div>
+                <button className="admin-create-btn" type="button" onClick={()=>void resetAgentCustomerPassword()} disabled={agentAllCustomerLoading}>{agentAllCustomerLoading ? "RESETTING..." : "RESET PASSWORD"}</button>
               </div>
             )}
           </section>
@@ -15927,3 +15984,4 @@ onChange={(event) => setConfirmPassword(event.target.value)}
 
 export default App;
 
+`
