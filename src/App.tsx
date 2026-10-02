@@ -997,6 +997,17 @@ const [allocationNote, setAllocationNote] = useState("");
 
 // Agent Admin customer management
 const [agentStats, setAgentStats] = useState({ customers: 0, available: 0, exposure: 0 });
+const [agentDashboardModule, setAgentDashboardModule] = useState<"HOME" | "ACCOUNT_OVERVIEW" | "CUSTOMERS" | "CREATE_CUSTOMER" | "DEPOSIT_WITHDRAW" | "BET_HISTORY" | "EXPOSURE" | "PASSWORD_RESET">("HOME");
+const [agentOverviewStats, setAgentOverviewStats] = useState({ agentAvailable: 0, customerAvailable: 0, customerExposure: 0, customers: 0 });
+const [agentCustomerSearchTotal, setAgentCustomerSearchTotal] = useState(0);
+const [agentExposureRows, setAgentExposureRows] = useState<Array<{ id: string; username: string; customer_code: string; exposure_balance: number; available_balance: number; status: string }>>([]);
+const [agentReportsLoading, setAgentReportsLoading] = useState(false);
+const [agentReportsRows, setAgentReportsRows] = useState<Array<{
+  id: string; bet_time: string; username: string; game_name: string; session_code: string; bazi_no: number | null;
+  market: string; bet_type: string; played_number: string; stake: number; rate: number; potential_win: number; result: string; status: string;
+}>>([]);
+const [agentReportsPage, setAgentReportsPage] = useState(0);
+const [agentReportsTotal, setAgentReportsTotal] = useState(0);
 
 const [agentCustomerLoading, setAgentCustomerLoading] = useState(false);
 const [agentCustomerError, setAgentCustomerError] = useState("");
@@ -1328,6 +1339,75 @@ const withdrawVirtualUsdFromAgent = async () => {
   }
 };
 
+const loadAgentAccountOverview = async () => {
+  try {
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError) throw userError;
+    const callerId = userData.user?.id;
+    if (!callerId) throw new Error("Agent Admin session is missing. Please log in again.");
+
+    const { data: agent, error: agentError } = await supabase
+      .from("agents")
+      .select("id")
+      .eq("profile_id", callerId)
+      .eq("status", "ACTIVE")
+      .maybeSingle();
+    if (agentError) throw agentError;
+    if (!agent?.id) throw new Error("Active Agent Admin record was not found.");
+
+    const { data: customerRows, error: customerError, count } = await supabase
+      .from("customers")
+      .select("id, profile_id, customer_code, status, created_at", { count: "exact" })
+      .eq("agent_id", agent.id)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false });
+    if (customerError) throw customerError;
+
+    const profileIds = (customerRows || []).map((row: any) => row.profile_id).filter(Boolean);
+    const [agentWalletResult, customerWalletResult, profileResult] = await Promise.all([
+      supabase.from("wallets").select("available_balance, exposure_balance, currency, status").eq("owner_profile_id", callerId).eq("currency", "USD").eq("status", "ACTIVE").maybeSingle(),
+      profileIds.length
+        ? supabase.from("wallets").select("owner_profile_id, available_balance, exposure_balance, currency, status").in("owner_profile_id", profileIds).eq("currency", "USD").eq("status", "ACTIVE")
+        : Promise.resolve({ data: [], error: null }),
+      profileIds.length
+        ? supabase.from("profiles").select("id, username").in("id", profileIds)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+    if (agentWalletResult.error) throw agentWalletResult.error;
+    if (customerWalletResult.error) throw customerWalletResult.error;
+    if (profileResult.error) throw profileResult.error;
+
+    const walletMap = new Map((customerWalletResult.data || []).map((wallet: any) => [String(wallet.owner_profile_id), wallet]));
+    const profileMap = new Map((profileResult.data || []).map((profile: any) => [String(profile.id), String(profile.username || "")]));
+    const exposureRows = (customerRows || []).map((customer: any) => {
+      const wallet = walletMap.get(String(customer.profile_id));
+      return {
+        id: String(customer.id),
+        username: profileMap.get(String(customer.profile_id)) || String(customer.customer_code || ""),
+        customer_code: String(customer.customer_code || ""),
+        exposure_balance: Number(wallet?.exposure_balance || 0),
+        available_balance: Number(wallet?.available_balance || 0),
+        status: String(customer.status || "ACTIVE"),
+      };
+    });
+
+    const customerAvailable = exposureRows.reduce((sum, row) => sum + row.available_balance, 0);
+    const customerExposure = exposureRows.reduce((sum, row) => sum + row.exposure_balance, 0);
+    const agentAvailable = Number(agentWalletResult.data?.available_balance || 0);
+
+    setAgentOverviewStats({
+      agentAvailable,
+      customerAvailable,
+      customerExposure,
+      customers: Number(count || 0),
+    });
+    setAgentExposureRows(exposureRows);
+    setAgentStats({ customers: Number(count || 0), available: agentAvailable, exposure: customerExposure });
+  } catch (error: any) {
+    setAgentCustomerError(error?.message || String(error));
+  }
+};
+
 const loadAgentCustomerPage = async (page = agentCustomerPage) => {
   setAgentCustomerLoading(true);
   setAgentCustomerError("");
@@ -1336,20 +1416,16 @@ const loadAgentCustomerPage = async (page = agentCustomerPage) => {
     const accessToken = await getFreshAgentAdminAccessToken();
     const { data, error } = await supabase.functions.invoke("agent-customer-admin", {
       headers: { Authorization: `Bearer ${accessToken}` },
-      body: { action: "list", page: Math.max(1, page), page_size: 10 },
+      body: { action: "list", page: Math.max(1, page), page_size: 25, search: "" },
     });
     if (error) throw error;
     if (!data?.success) throw new Error(data?.error || "Unable to load customer accounts.");
 
     setAgentCustomers(data.customers || []);
+    setAgentCustomerSearchTotal(Number(data.total || 0));
     setAgentCustomerPage(Math.max(1, page));
-    setAgentStats((current) => ({
-      ...current,
-      customers: Number(data.total || 0),
-      available: Number(data.available_balance || 0),
-      exposure: Number(data.exposure_balance || 0),
-    }));
-    if (page === 1) void loadAgentAllCustomerAccounts();
+    await loadAgentAccountOverview();
+    if (page === 1) await loadAgentAllCustomerAccounts(1, agentAllCustomerSearch);
   } catch (error: any) {
     setAgentCustomerSuccess("");
     setAgentCustomerError(error?.message || String(error));
@@ -6557,23 +6633,117 @@ const deleteCustomerAccount = async (account: { profile_id: string; username: st
   }
 };
 
-const loadAgentAllCustomerAccounts = async () => {
-  setAgentAllCustomerLoading(true); setAgentCustomerError("");
+const loadAgentAllCustomerAccounts = async (page = agentAllCustomerPage, search = agentAllCustomerSearch) => {
+  setAgentAllCustomerLoading(true);
+  setAgentCustomerError("");
   try {
     const accessToken = await getFreshAgentAdminAccessToken();
+    const safePage = Math.max(1, Math.floor(page));
+    const safeSearch = String(search || "").trim().toLowerCase();
     const { data, error } = await supabase.functions.invoke("agent-customer-admin", {
-      headers: { Authorization: `Bearer ${accessToken}` }, body: { action: "list", page: 1, page_size: 100 },
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: { action: "list", page: safePage, page_size: 25, search: safeSearch },
     });
-    if (error) throw error; if (!data?.success) throw new Error(data?.error || "Unable to load customer accounts.");
+    if (error) throw error;
+    if (!data?.success) throw new Error(data?.error || "Unable to load customer accounts.");
+    setAgentCustomerSearchTotal(Number(data.total || 0));
     setAgentAllCustomers((data.customers || []).map((c: any) => ({
-      id:String(c.id), profile_id:String(c.profile_id || c.id), username:String(c.username || c.customer_code || ""),
-      customer_code:String(c.customer_code || ""), full_name:String(c.full_name || ""), email:String(c.email || ""),
-      available_balance:Number(c.available_balance || 0), exposure_balance:Number(c.exposure_balance || 0),
-      status:String(c.status || "ACTIVE"), wallet_status:String(c.wallet_status || "ACTIVE"),
+      id: String(c.id), profile_id: String(c.profile_id || c.id), username: String(c.username || c.customer_code || ""),
+      customer_code: String(c.customer_code || ""), full_name: String(c.full_name || ""), email: String(c.email || ""),
+      available_balance: Number(c.available_balance || 0), exposure_balance: Number(c.exposure_balance || 0),
+      status: String(c.status || "ACTIVE"), wallet_status: String(c.wallet_status || "ACTIVE"),
     })));
-    setAgentAllCustomerPage(1);
-  } catch (error: any) { setAgentCustomerError(error?.message || String(error)); }
-  finally { setAgentAllCustomerLoading(false); }
+    setAgentAllCustomerPage(safePage);
+  } catch (error: any) {
+    setAgentCustomerError(error?.message || String(error));
+  } finally {
+    setAgentAllCustomerLoading(false);
+  }
+};
+
+const loadAgentBetHistory = async (page = 0) => {
+  if (agentReportsLoading) return;
+  setAgentReportsLoading(true);
+  setAgentCustomerError("");
+  try {
+    const pageSize = 25;
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+    const { data: itemRows, error: itemError, count } = await supabase
+      .from("bet_items")
+      .select("id, bet_id, customer_id, session_id, bet_type, played_number, stake, rate, potential_win, status, created_at", { count: "exact" })
+      .order("created_at", { ascending: false })
+      .range(from, to);
+    if (itemError) throw itemError;
+    const rows = itemRows || [];
+    setAgentReportsTotal(Number(count || 0));
+    if (rows.length === 0) {
+      setAgentReportsRows([]);
+      setAgentReportsPage(page);
+      return;
+    }
+
+    const betIds = [...new Set(rows.map((row: any) => row.bet_id).filter(Boolean))];
+    const customerIds = [...new Set(rows.map((row: any) => row.customer_id).filter(Boolean))];
+    const sessionIds = [...new Set(rows.map((row: any) => row.session_id).filter(Boolean))];
+    const [betResult, customerResult, sessionResult, resultResult] = await Promise.all([
+      betIds.length ? supabase.from("bets").select("id, customer_id, agent_id, session_id").in("id", betIds) : Promise.resolve({ data: [], error: null }),
+      customerIds.length ? supabase.from("customers").select("id, profile_id, agent_id").in("id", customerIds) : Promise.resolve({ data: [], error: null }),
+      sessionIds.length ? supabase.from("game_sessions").select("id, session_code, game_id, session_date, bazi_no, market").in("id", sessionIds) : Promise.resolve({ data: [], error: null }),
+      sessionIds.length ? supabase.from("results").select("session_id, single_digit, patti, status, is_current").in("session_id", sessionIds).eq("is_current", true).eq("status", "DECLARED") : Promise.resolve({ data: [], error: null }),
+    ]);
+    if (betResult.error) throw betResult.error;
+    if (customerResult.error) throw customerResult.error;
+    if (sessionResult.error) throw sessionResult.error;
+    if (resultResult.error) throw resultResult.error;
+
+    const customers = customerResult.data || [];
+    const sessions = sessionResult.data || [];
+    const results = resultResult.data || [];
+    const profileIds = customers.map((row: any) => row.profile_id).filter(Boolean);
+    const gameIds = [...new Set(sessions.map((row: any) => row.game_id).filter(Boolean))];
+    const [profileResult, gameResult] = await Promise.all([
+      profileIds.length ? supabase.from("profiles").select("id, username").in("id", profileIds) : Promise.resolve({ data: [], error: null }),
+      gameIds.length ? supabase.from("games").select("id, game_name").in("id", gameIds) : Promise.resolve({ data: [], error: null }),
+    ]);
+    if (profileResult.error) throw profileResult.error;
+    if (gameResult.error) throw gameResult.error;
+
+    const profileMap = new Map((profileResult.data || []).map((row: any) => [String(row.id), String(row.username || "")]));
+    const customerMap = new Map(customers.map((row: any) => [String(row.id), row]));
+    const sessionMap = new Map(sessions.map((row: any) => [String(row.id), row]));
+    const resultMap = new Map(results.map((row: any) => [String(row.session_id), row]));
+    const gameMap = new Map((gameResult.data || []).map((row: any) => [String(row.id), String(row.game_name || "Game")]));
+
+    setAgentReportsRows(rows.map((row: any) => {
+      const customer = customerMap.get(String(row.customer_id));
+      const session = sessionMap.get(String(row.session_id));
+      const result = session ? resultMap.get(String(session.id)) : null;
+      return {
+        id: String(row.id),
+        bet_time: String(row.created_at || ""),
+        username: profileMap.get(String(customer?.profile_id || "")) || "-",
+        game_name: gameMap.get(String(session?.game_id || "")) || "Game",
+        session_code: String(session?.session_code || "-"),
+        bazi_no: session?.bazi_no == null ? null : Number(session.bazi_no),
+        market: String(session?.market || "-"),
+        bet_type: String(row.bet_type || "-"),
+        played_number: String(row.played_number ?? "-"),
+        stake: Number(row.stake || 0),
+        rate: Number(row.rate || 0),
+        potential_win: Number(row.potential_win || 0),
+        result: result ? `${String(result.single_digit || "-")} - ${String(result.patti || "-")}` : "-",
+        status: String(row.status || "-"),
+      };
+    }));
+    setAgentReportsPage(page);
+  } catch (error: any) {
+    setAgentReportsRows([]);
+    setAgentReportsTotal(0);
+    setAgentCustomerError(error?.message || String(error));
+  } finally {
+    setAgentReportsLoading(false);
+  }
 };
 
 const setAgentCustomerAccountStatus = async (account: { profile_id: string; username: string; status: string }) => {
@@ -8806,169 +8976,278 @@ const renderForcedPasswordReset = () => (
 </div>
 );
 
-const renderAgentAdminArea = () => (
-<div className="admin-shell">
-<header className="admin-header">
-<div>
-<div className="admin-brand">APNA MATKA</div>
-<div className="admin-subtitle">AGENT ADMIN CONTROL PANEL</div>
-</div>
-<div className="admin-header-actions">
-<span className="admin-role-badge">AGENT ADMIN</span>
-<button className="admin-logout-btn" onClick={logoutCustomer}>LOGOUT</button>
-</div>
-</header>
+const renderAgentAdminArea = () => {
+  const customerPageCount = Math.max(1, Math.ceil(agentCustomerSearchTotal / 25));
+  const currentCustomerPage = Math.min(agentAllCustomerPage, customerPageCount);
 
-<main className="admin-main">
-<section className="admin-welcome-card">
-<div>
-<div className="admin-section-kicker">AGENT CONTROL CENTER</div>
-<h1>Agent Admin Dashboard</h1>
-<p>Manage customer accounts, virtual USD balances, exposure and betting activity.</p>
-</div>
-<button className="admin-refresh-btn" type="button" onClick={() => loadAgentCustomerPage(agentCustomerPage)} disabled={agentCustomerLoading}>
-{agentCustomerLoading ? "LOADING..." : "REFRESH"}
-</button>
-</section>
+  const openAgentModule = (module: typeof agentDashboardModule) => {
+    setAgentDashboardModule(module);
+    setAgentCustomerError("");
+    setAgentCustomerSuccess("");
+    if (module === "CUSTOMERS") {
+      setAgentAllCustomerSearch("");
+      setAgentAllCustomerPage(1);
+      void loadAgentAllCustomerAccounts(1, "");
+    }
+    if (module === "ACCOUNT_OVERVIEW") {
+      void loadAgentAccountOverview();
+    }
+    if (module === "BET_HISTORY") {
+      setAgentReportsPage(0);
+      void loadAgentBetHistory(0);
+    }
+    if (module === "EXPOSURE") {
+      void loadAgentAccountOverview();
+    }
+  };
 
-{agentCustomerSuccess ? <div className="admin-success">{agentCustomerSuccess}</div> : null}
-{agentCustomerError ? <div className="admin-error">{agentCustomerError}</div> : null}
-
-<section className="admin-stat-grid">
-<div className="admin-stat-card"><span>CUSTOMERS</span><strong>{agentStats.customers}</strong></div>
-<div className="admin-stat-card"><span>AVAILABLE COINS</span><strong className="admin-available-value">${agentStats.available.toFixed(2)}</strong></div>
-<div className="admin-stat-card"><span>TOTAL EXPOSURE</span><strong className="admin-exposure-value">${agentStats.exposure.toFixed(2)}</strong></div>
-</section>
-
-{agentCoinModule === "OVERVIEW" ? (
-<>
-<section className="admin-panel-card">
-<div className="admin-panel-title-row">
-<div className="admin-panel-title">ALL CUSTOMER ACCOUNTS</div>
-<button className="admin-small-action" type="button" onClick={() => { setShowAgentCustomerForm((value) => !value); setAgentCustomerError(""); setAgentCustomerSuccess(""); }}>
-{showAgentCustomerForm ? "CLOSE" : "CREATE CUSTOMER"}
-</button>
-</div>
-
-{showAgentCustomerForm ? (
-<div className="admin-form">
-<div className="admin-form-field"><label>USERNAME</label><input className="admin-form-input" type="text" value={agentCustomerUsername} onChange={(e) => setAgentCustomerUsername(e.target.value.toLowerCase())} placeholder="Enter username" maxLength={50} /></div>
-<div className="admin-form-field"><label>FULL NAME (OPTIONAL)</label><input className="admin-form-input" type="text" value={agentCustomerFullName} onChange={(e) => setAgentCustomerFullName(e.target.value)} placeholder="Enter full name" /></div>
-<div className="admin-form-field"><label>EMAIL (OPTIONAL)</label><input className="admin-form-input" type="email" value={agentCustomerEmail} onChange={(e) => setAgentCustomerEmail(e.target.value)} placeholder="customer@example.com" /></div>
-<div className="admin-form-field"><label>PASSWORD</label><input className="admin-form-input" type="password" value={agentCustomerPassword} onChange={(e) => setAgentCustomerPassword(e.target.value)} placeholder="8–16 characters" maxLength={16} /></div>
-<div className="admin-form-field"><label>CONFIRM PASSWORD</label><input className="admin-form-input" type="password" value={agentCustomerConfirmPassword} onChange={(e) => setAgentCustomerConfirmPassword(e.target.value)} placeholder="Re-enter password" maxLength={16} /></div>
-<div className="admin-form-note">Customer will be created under this Agent Admin. Email is optional; username and password are required.</div>
-<button className="admin-create-btn" type="button" onClick={createAgentCustomer} disabled={agentCustomerLoading}>{agentCustomerLoading ? "CREATING..." : "CREATE CUSTOMER"}</button>
-</div>
-) : null}
-
-<div className="admin-wallet-lookup-row" style={{marginBottom:"8px"}}>
-<input className="admin-form-input" type="text" value={agentAllCustomerSearch} onChange={(e)=>{setAgentAllCustomerSearch(e.target.value);setAgentAllCustomerPage(1);}} placeholder="Search username..." maxLength={50}/>
-<button type="button" className="admin-small-action" onClick={()=>{setAgentAllCustomerPage(1);void loadAgentAllCustomerAccounts();}} disabled={agentAllCustomerLoading}>{agentAllCustomerLoading?"LOADING...":"SEARCH"}</button>
-</div>
-{(() => {
-  const query=agentAllCustomerSearch.trim().toLowerCase();
-  const filtered=agentAllCustomers.filter((c)=>!query||c.username.toLowerCase().includes(query));
-  const pageSize=10,pageCount=Math.max(1,Math.ceil(filtered.length/pageSize)),page=Math.min(agentAllCustomerPage,pageCount);
-  const rows=filtered.slice((page-1)*pageSize,page*pageSize);
-  if(rows.length===0)return <div className="admin-empty">{agentAllCustomerLoading?"Loading customer accounts...":"No customer accounts found."}</div>;
-  return <>
-    <div className="admin-agent-list">
-      {rows.map((c)=><div className="admin-agent-row" key={c.id} style={{alignItems:"flex-start",flexWrap:"wrap"}}>
-        <div style={{flex:1,minWidth:"150px"}}><b>{c.username||c.customer_code}</b><small>{c.full_name||"Name not available"} • {c.customer_code}</small><small>Available $ {c.available_balance.toFixed(2)} • Exposure $ {c.exposure_balance.toFixed(2)}</small></div>
-        <div style={{display:"flex",gap:"5px",flexWrap:"wrap",justifyContent:"flex-end"}}>
-          <span className={`admin-status ${c.status==="ACTIVE"?"active":""}`}>{c.status==="BLOCKED"?"PAUSED":c.status}</span>
-          <button type="button" className="admin-small-action" onClick={()=>setSelectedAgentCustomer(c)}>VIEW</button>
-          <button type="button" className="admin-small-action" onClick={()=>void setAgentCustomerAccountStatus(c)} disabled={agentAllCustomerLoading}>{c.status==="BLOCKED"?"RESUME CUSTOMER":"PAUSE CUSTOMER"}</button>
+  return (
+    <div className="admin-shell">
+      <header className="admin-header">
+        <div>
+          <div className="admin-brand">APNA MATKA</div>
+          <div className="admin-subtitle">AGENT ADMIN CONTROL PANEL</div>
         </div>
-      </div>)}
+        <div className="admin-header-actions">
+          <span className="admin-role-badge">AGENT ADMIN</span>
+          <button className="admin-logout-btn" onClick={logoutCustomer}>LOGOUT</button>
+        </div>
+      </header>
+
+      <main className="admin-main">
+        <section className="admin-welcome-card">
+          <div>
+            <div className="admin-section-kicker">AGENT CONTROL CENTER</div>
+            <h1>Agent Admin Dashboard</h1>
+            <p>Manage your customers, virtual USD balances, exposure and betting activity.</p>
+          </div>
+          <button
+            className="admin-refresh-btn"
+            type="button"
+            onClick={() => {
+              if (agentDashboardModule === "BET_HISTORY") {
+                void loadAgentBetHistory(agentReportsPage);
+              } else if (agentDashboardModule === "CUSTOMERS") {
+                void loadAgentAllCustomerAccounts(currentCustomerPage, agentAllCustomerSearch);
+              } else {
+                void loadAgentCustomerPage(agentCustomerPage);
+              }
+            }}
+            disabled={agentCustomerLoading || agentAllCustomerLoading || agentReportsLoading}
+          >
+            {agentCustomerLoading || agentAllCustomerLoading || agentReportsLoading ? "LOADING..." : "REFRESH"}
+          </button>
+        </section>
+
+        {agentCustomerSuccess ? <div className="admin-success">{agentCustomerSuccess}</div> : null}
+        {agentCustomerError ? <div className="admin-error">{agentCustomerError}</div> : null}
+
+        {agentDashboardModule === "HOME" ? (
+          <>
+            <section className="admin-stat-grid">
+              <div className="admin-stat-card"><span>TOTAL CUSTOMERS</span><strong>{agentOverviewStats.customers}</strong></div>
+              <div className="admin-stat-card"><span>AGENT AVAILABLE BALANCE</span><strong className="admin-available-value">${agentOverviewStats.agentAvailable.toFixed(2)}</strong></div>
+              <div className="admin-stat-card"><span>CUSTOMER AVAILABLE BALANCE</span><strong className="admin-available-value">${agentOverviewStats.customerAvailable.toFixed(2)}</strong></div>
+              <div className="admin-stat-card"><span>CUSTOMER EXPOSURE</span><strong className="admin-exposure-value">${agentOverviewStats.customerExposure.toFixed(2)}</strong></div>
+            </section>
+
+            <section className="admin-module-grid admin-home-modules">
+              <button className="admin-module-card" type="button" onClick={() => openAgentModule("ACCOUNT_OVERVIEW")}>
+                <b>Account Overview</b><small>Agent balance, customer balance & exposure</small>
+              </button>
+              <button className="admin-module-card" type="button" onClick={() => openAgentModule("CUSTOMERS")}>
+                <b>Customer Accounts</b><small>View only your customers, search & manage accounts</small>
+              </button>
+              <button className="admin-module-card" type="button" onClick={() => openAgentModule("CREATE_CUSTOMER")}>
+                <b>Create Customer</b><small>Create a new customer under this Agent</small>
+              </button>
+              <button className="admin-module-card" type="button" onClick={() => { setAgentDashboardModule("DEPOSIT_WITHDRAW"); setAgentCoinModule("OVERVIEW"); setAgentCustomerError(""); setAgentCustomerSuccess(""); }}>
+                <b>Deposit / Withdrawal</b><small>Deposit to Customer or withdraw from Customer</small>
+              </button>
+              <button className="admin-module-card" type="button" onClick={() => openAgentModule("BET_HISTORY")}>
+                <b>Bet History</b><small>Only your customers' betting activity — 25 per page</small>
+              </button>
+              <button className="admin-module-card" type="button" onClick={() => openAgentModule("EXPOSURE")}>
+                <b>Exposure</b><small>Customer exposure and available balance details</small>
+              </button>
+              <button className="admin-module-card" type="button" onClick={() => { setAgentDashboardModule("PASSWORD_RESET"); setAgentCoinModule("OVERVIEW"); setAdminPasswordResetTarget(""); setAdminPasswordResetPassword(""); setAgentCustomerError(""); setAgentCustomerSuccess(""); }}>
+                <b>Password Reset</b><small>Own password change or Customer password reset</small>
+              </button>
+            </section>
+          </>
+        ) : agentDashboardModule === "ACCOUNT_OVERVIEW" ? (
+          <section className="admin-panel-card">
+            <div className="admin-panel-title-row">
+              <div className="admin-panel-title">ACCOUNT OVERVIEW</div>
+              <button className="admin-small-action" type="button" onClick={() => setAgentDashboardModule("HOME")}>BACK</button>
+            </div>
+            <div className="admin-stat-grid">
+              <div className="admin-stat-card"><span>AGENT AVAILABLE BALANCE</span><strong className="admin-available-value">${agentOverviewStats.agentAvailable.toFixed(2)}</strong></div>
+              <div className="admin-stat-card"><span>CUSTOMER AVAILABLE BALANCE</span><strong className="admin-available-value">${agentOverviewStats.customerAvailable.toFixed(2)}</strong></div>
+              <div className="admin-stat-card"><span>CUSTOMER EXPOSURE BALANCE</span><strong className="admin-exposure-value">${agentOverviewStats.customerExposure.toFixed(2)}</strong></div>
+              <div className="admin-stat-card"><span>TOTAL CUSTOMERS</span><strong>{agentOverviewStats.customers}</strong></div>
+            </div>
+          </section>
+        ) : agentDashboardModule === "CUSTOMERS" ? (
+          <section className="admin-panel-card">
+            <div className="admin-panel-title-row">
+              <div>
+                <div className="admin-section-kicker">CUSTOMER MANAGEMENT</div>
+                <div className="admin-panel-title">CUSTOMER ACCOUNTS</div>
+              </div>
+              <button className="admin-small-action" type="button" onClick={() => setAgentDashboardModule("HOME")}>BACK</button>
+            </div>
+
+            <div className="admin-wallet-lookup-row" style={{ marginBottom: "12px" }}>
+              <input
+                className="admin-form-input"
+                type="text"
+                value={agentAllCustomerSearch}
+                onChange={(e) => setAgentAllCustomerSearch(e.target.value.toLowerCase())}
+                onKeyDown={(e) => { if (e.key === "Enter") { setAgentAllCustomerPage(1); void loadAgentAllCustomerAccounts(1, agentAllCustomerSearch); } }}
+                placeholder="Search your customer username..."
+                maxLength={50}
+              />
+              <button
+                type="button"
+                className="admin-small-action"
+                onClick={() => { setAgentAllCustomerPage(1); void loadAgentAllCustomerAccounts(1, agentAllCustomerSearch); }}
+                disabled={agentAllCustomerLoading}
+              >
+                {agentAllCustomerLoading ? "SEARCHING..." : "SEARCH"}
+              </button>
+            </div>
+
+            {agentAllCustomerLoading ? <div className="admin-empty">LOADING CUSTOMER ACCOUNTS...</div> : agentAllCustomers.length === 0 ? <div className="admin-empty">No customer accounts found.</div> : (
+              <>
+                <div className="admin-agent-list">
+                  {agentAllCustomers.map((c) => (
+                    <div className="admin-agent-row" key={c.id} style={{ alignItems: "flex-start", flexWrap: "wrap" }}>
+                      <div style={{ flex: 1, minWidth: "170px" }}>
+                        <b>{c.username || c.customer_code}</b>
+                        <small>{c.full_name || "Name not available"} • {c.customer_code}</small>
+                        <small>Available $ {c.available_balance.toFixed(2)} • Exposure $ {c.exposure_balance.toFixed(2)}</small>
+                      </div>
+                      <div style={{ display: "flex", gap: "5px", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                        <span className={`admin-status ${c.status === "ACTIVE" ? "active" : ""}`}>{c.status === "BLOCKED" ? "PAUSED" : c.status}</span>
+                        <button type="button" className="admin-small-action" onClick={() => setSelectedAgentCustomer(c)}>VIEW</button>
+                        <button type="button" className="admin-small-action" onClick={() => void setAgentCustomerAccountStatus(c)} disabled={agentAllCustomerLoading}>{c.status === "BLOCKED" ? "RESUME CUSTOMER" : "PAUSE CUSTOMER"}</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {selectedAgentCustomer ? (
+                  <div className="admin-wallet-result-row" style={{ marginTop: "10px" }}>
+                    <div><b>{selectedAgentCustomer.username}</b><small>{selectedAgentCustomer.customer_code} • {selectedAgentCustomer.email || "Email not available"}</small></div>
+                    <div className="admin-wallet-result-balances">
+                      <span>Available <strong className="admin-available-value">${Number(selectedAgentCustomer.available_balance || 0).toFixed(2)}</strong></span>
+                      <span>Exposure <strong className="admin-exposure-value">${Number(selectedAgentCustomer.exposure_balance || 0).toFixed(2)}</strong></span>
+                      <span>Status <strong>{selectedAgentCustomer.status === "BLOCKED" ? "PAUSED" : selectedAgentCustomer.status}</strong></span>
+                    </div>
+                  </div>
+                ) : null}
+                {customerPageCount > 1 ? (
+                  <div className="admin-pagination">
+                    <button className="admin-small-action" disabled={currentCustomerPage <= 1 || agentAllCustomerLoading} onClick={() => void loadAgentAllCustomerAccounts(currentCustomerPage - 1, agentAllCustomerSearch)}>PREVIOUS</button>
+                    <span>PAGE {currentCustomerPage} / {customerPageCount}</span>
+                    <button className="admin-small-action" disabled={currentCustomerPage >= customerPageCount || agentAllCustomerLoading} onClick={() => void loadAgentAllCustomerAccounts(currentCustomerPage + 1, agentAllCustomerSearch)}>NEXT</button>
+                  </div>
+                ) : null}
+              </>
+            )}
+          </section>
+        ) : agentDashboardModule === "CREATE_CUSTOMER" ? (
+          <section className="admin-panel-card">
+            <div className="admin-panel-title-row">
+              <div><div className="admin-section-kicker">CUSTOMER MANAGEMENT</div><div className="admin-panel-title">CREATE CUSTOMER</div></div>
+              <button className="admin-small-action" type="button" onClick={() => setAgentDashboardModule("HOME")}>BACK</button>
+            </div>
+            <div className="admin-form">
+              <div className="admin-form-field"><label>USERNAME</label><input className="admin-form-input" type="text" value={agentCustomerUsername} onChange={(e) => setAgentCustomerUsername(e.target.value.toLowerCase())} placeholder="Enter username" maxLength={50} /></div>
+              <div className="admin-form-field"><label>FULL NAME (OPTIONAL)</label><input className="admin-form-input" type="text" value={agentCustomerFullName} onChange={(e) => setAgentCustomerFullName(e.target.value)} placeholder="Enter full name" /></div>
+              <div className="admin-form-field"><label>EMAIL (OPTIONAL)</label><input className="admin-form-input" type="email" value={agentCustomerEmail} onChange={(e) => setAgentCustomerEmail(e.target.value)} placeholder="customer@example.com" /></div>
+              <div className="admin-form-field"><label>PASSWORD</label><input className="admin-form-input" type="password" value={agentCustomerPassword} onChange={(e) => setAgentCustomerPassword(e.target.value)} placeholder="8–16 characters" maxLength={16} /></div>
+              <div className="admin-form-field"><label>CONFIRM PASSWORD</label><input className="admin-form-input" type="password" value={agentCustomerConfirmPassword} onChange={(e) => setAgentCustomerConfirmPassword(e.target.value)} placeholder="Re-enter password" maxLength={16} /></div>
+              <div className="admin-form-note">Customer will be created under this Agent Admin. Email is optional; username and password are required.</div>
+              <button className="admin-create-btn" type="button" onClick={createAgentCustomer} disabled={agentCustomerLoading}>{agentCustomerLoading ? "CREATING..." : "CREATE CUSTOMER"}</button>
+            </div>
+          </section>
+        ) : agentDashboardModule === "DEPOSIT_WITHDRAW" ? (
+          <section className="admin-panel-card">
+            <div className="admin-panel-title-row">
+              <div><div className="admin-section-kicker">CUSTOMER WALLET CONTROL</div><div className="admin-panel-title">DEPOSIT / WITHDRAWAL</div></div>
+              <button className="admin-small-action" type="button" onClick={() => { setAgentDashboardModule("HOME"); setAgentCoinModule("OVERVIEW"); }}>BACK</button>
+            </div>
+            {agentCoinModule === "OVERVIEW" ? (
+              <div className="admin-module-grid">
+                <button className="admin-module-card" type="button" onClick={() => setAgentCoinModule("DEPOSIT_CUSTOMER")}><b>Deposit</b><small>Send virtual USD from Agent to Customer</small></button>
+                <button className="admin-module-card" type="button" onClick={() => setAgentCoinModule("WITHDRAW_CUSTOMER")}><b>Withdrawal</b><small>Return virtual USD from Customer to Agent</small></button>
+              </div>
+            ) : renderAgentCustomerCoinModule()}
+          </section>
+        ) : agentDashboardModule === "BET_HISTORY" ? (
+          <section className="admin-panel-card">
+            <div className="admin-panel-title-row">
+              <div><div className="admin-section-kicker">BETTING REPORT</div><div className="admin-panel-title">BET HISTORY</div></div>
+              <button className="admin-small-action" type="button" onClick={() => setAgentDashboardModule("HOME")}>BACK</button>
+            </div>
+            <div style={{ overflowX: "auto", width: "100%" }}>
+              {agentReportsLoading ? <div className="admin-empty">LOADING BET HISTORY...</div> : agentReportsRows.length === 0 ? <div className="admin-empty">No betting entries found.</div> : (
+                <table className="admin-report-table" style={{ minWidth: "1100px", width: "100%" }}>
+                  <thead><tr><th>TIME</th><th>USERNAME</th><th>GAME</th><th>SESSION</th><th>BAZI</th><th>MARKET</th><th>BET TYPE</th><th>NUMBER</th><th>STAKE</th><th>RATE</th><th>POTENTIAL WIN</th><th>RESULT</th><th>STATUS</th></tr></thead>
+                  <tbody>{agentReportsRows.map((row) => <tr key={row.id}><td>{row.bet_time ? new Date(row.bet_time).toLocaleString() : "-"}</td><td>{row.username}</td><td>{row.game_name}</td><td>{row.session_code}</td><td>{row.bazi_no ?? "-"}</td><td>{row.market}</td><td>{row.bet_type}</td><td>{row.played_number}</td><td>${row.stake.toFixed(2)}</td><td>{row.rate}X</td><td>${row.potential_win.toFixed(2)}</td><td>{row.result}</td><td>{row.status}</td></tr>)}</tbody>
+                </table>
+              )}
+            </div>
+            {agentReportsTotal > 0 ? <div className="admin-pagination"><button className="admin-small-action" disabled={agentReportsPage <= 0 || agentReportsLoading} onClick={() => void loadAgentBetHistory(agentReportsPage - 1)}>PREVIOUS</button><span>PAGE {agentReportsPage + 1} OF {Math.max(1, Math.ceil(agentReportsTotal / 25))} • SHOWING {agentReportsRows.length} OF {agentReportsTotal}</span><button className="admin-small-action" disabled={agentReportsLoading || (agentReportsPage + 1) * 25 >= agentReportsTotal} onClick={() => void loadAgentBetHistory(agentReportsPage + 1)}>NEXT</button></div> : null}
+          </section>
+        ) : agentDashboardModule === "EXPOSURE" ? (
+          <section className="admin-panel-card">
+            <div className="admin-panel-title-row">
+              <div><div className="admin-section-kicker">CUSTOMER RISK VIEW</div><div className="admin-panel-title">CUSTOMER EXPOSURE</div></div>
+              <button className="admin-small-action" type="button" onClick={() => setAgentDashboardModule("HOME")}>BACK</button>
+            </div>
+            <div className="admin-stat-grid">
+              <div className="admin-stat-card"><span>TOTAL CUSTOMER EXPOSURE</span><strong className="admin-exposure-value">${agentOverviewStats.customerExposure.toFixed(2)}</strong></div>
+              <div className="admin-stat-card"><span>TOTAL CUSTOMER AVAILABLE</span><strong className="admin-available-value">${agentOverviewStats.customerAvailable.toFixed(2)}</strong></div>
+            </div>
+            {agentExposureRows.length === 0 ? <div className="admin-empty">No customer accounts found.</div> : <div className="admin-agent-list">{agentExposureRows.map((row) => <div className="admin-agent-row" key={row.id}><div style={{ flex: 1 }}><b>{row.username}</b><small>{row.customer_code}</small></div><div className="admin-wallet-result-balances"><span>Available <strong className="admin-available-value">${row.available_balance.toFixed(2)}</strong></span><span>Exposure <strong className="admin-exposure-value">${row.exposure_balance.toFixed(2)}</strong></span><span>Status <strong>{row.status === "BLOCKED" ? "PAUSED" : row.status}</strong></span></div></div>)}</div>}
+          </section>
+        ) : (
+          <section className="admin-panel-card">
+            <div className="admin-panel-title-row">
+              <div><div className="admin-section-kicker">ACCOUNT SECURITY</div><div className="admin-panel-title">PASSWORD RESET</div></div>
+              <button className="admin-small-action" type="button" onClick={() => setAgentDashboardModule("HOME")}>BACK</button>
+            </div>
+            {agentCoinModule === "OVERVIEW" ? (
+              <div className="admin-module-grid">
+                <button className="admin-module-card" type="button" onClick={() => setAgentCoinModule("CHANGE_PASSWORD")}><b>Own Password</b><small>Change your Agent Admin password</small></button>
+                <button className="admin-module-card" type="button" onClick={() => { setAgentCoinModule("PASSWORD_RESET"); setAdminPasswordResetTarget(""); setAdminPasswordResetPassword(""); }}><b>Customer Password Reset</b><small>Select your Customer and set a new password</small></button>
+              </div>
+            ) : agentCoinModule === "CHANGE_PASSWORD" ? (
+              <div className="admin-form">
+                <div className="admin-panel-title-row"><div className="admin-panel-title">OWN PASSWORD CHANGE</div><button className="admin-small-action" type="button" onClick={() => setAgentCoinModule("OVERVIEW")}>BACK</button></div>
+                <div className="admin-form-field"><label>CURRENT PASSWORD</label><input className="admin-form-input" type="password" value={passwordResetCurrent} onChange={(e)=>setPasswordResetCurrent(e.target.value)} maxLength={16} /></div>
+                <div className="admin-form-field"><label>NEW PASSWORD</label><input className="admin-form-input" type="password" value={passwordResetNew} onChange={(e)=>setPasswordResetNew(e.target.value)} maxLength={16} /></div>
+                <div className="admin-form-field"><label>REPEAT NEW PASSWORD</label><input className="admin-form-input" type="password" value={passwordResetConfirm} onChange={(e)=>setPasswordResetConfirm(e.target.value)} maxLength={16} /></div>
+                {passwordResetError ? <div className="admin-error">{passwordResetError}</div> : null}
+                {passwordResetSuccess ? <div className="admin-success">{passwordResetSuccess}</div> : null}
+                <button className="admin-create-btn" type="button" onClick={()=>void verifyCurrentPasswordAndUpdate(false)} disabled={passwordResetLoading}>{passwordResetLoading ? "UPDATING..." : "UPDATE PASSWORD"}</button>
+              </div>
+            ) : (
+              <div className="admin-form">
+                <div className="admin-panel-title-row"><div className="admin-panel-title">CUSTOMER PASSWORD RESET</div><button className="admin-small-action" type="button" onClick={() => setAgentCoinModule("OVERVIEW")}>BACK</button></div>
+                <div className="admin-form-field"><label>CUSTOMER</label><select className="admin-form-input" value={adminPasswordResetTarget} onChange={(e)=>setAdminPasswordResetTarget(e.target.value)}><option value="">Select Customer</option>{agentAllCustomers.filter(c=>c.status==="ACTIVE").map(c=><option key={c.profile_id} value={c.profile_id}>{c.username} — {c.customer_code}</option>)}</select></div>
+                <div className="admin-form-field"><label>NEW PASSWORD</label><input className="admin-form-input" type="password" value={adminPasswordResetPassword} onChange={(e)=>setAdminPasswordResetPassword(e.target.value)} maxLength={16} placeholder="8–16 characters" /></div>
+                <div className="admin-form-note">Customer password reset backend action is not connected yet. This screen does not change any password.</div>
+              </div>
+            )}
+          </section>
+        )}
+      </main>
     </div>
-    {selectedAgentCustomer?<div className="admin-wallet-result-row" style={{marginTop:"8px"}}><div><b>{selectedAgentCustomer.username}</b><small>{selectedAgentCustomer.customer_code} • {selectedAgentCustomer.email||"Email not available"}</small></div><div className="admin-wallet-result-balances"><span>Available <strong className="admin-available-value">${Number(selectedAgentCustomer.available_balance||0).toFixed(2)}</strong></span><span>Exposure <strong className="admin-exposure-value">${Number(selectedAgentCustomer.exposure_balance||0).toFixed(2)}</strong></span><span>Status <strong>{selectedAgentCustomer.status==="BLOCKED"?"PAUSED":selectedAgentCustomer.status}</strong></span></div></div>:null}
-    {pageCount>1?<div className="admin-pagination"><button type="button" className="admin-small-action" disabled={page<=1} onClick={()=>setAgentAllCustomerPage(page-1)}>PREVIOUS</button><span>PAGE {page} / {pageCount}</span><button type="button" className="admin-small-action" disabled={page>=pageCount} onClick={()=>setAgentAllCustomerPage(page+1)}>NEXT</button></div>:null}
-  </>;
-})()}
-</section>
-
-<section className="admin-module-grid">
-<button className="admin-module-card active" type="button"><b>Customers</b><small>Create and manage customer accounts</small></button>
-<button className="admin-module-card" type="button" onClick={() => setAdminError("Virtual Coin module is represented by the Customer Deposit and Customer Withdraw cards below.")}><b>Virtual Coins</b><small>Agent wallet and customer transfers</small></button>
-<button className="admin-module-card" type="button" onClick={() => setAdminError("Bet History module is the next build step.")}><b>Bet History</b><small>View customer betting activity</small></button>
-<button className="admin-module-card" type="button" onClick={() => setAdminError("Exposure module is the next build step.")}><b>Exposure</b><small>View active customer exposure</small></button>
-<button className="admin-module-card" type="button" onClick={() => setAgentCoinModule("DEPOSIT_CUSTOMER")}><b>Deposit to Customer</b><small>Send virtual USD from Agent to Customer</small></button>
-<button className="admin-module-card" type="button" onClick={() => setAgentCoinModule("WITHDRAW_CUSTOMER")}><b>Withdraw from Customer</b><small>Return virtual USD from Customer to Agent</small></button>
-<button className="admin-module-card" type="button" onClick={() => { setAgentCoinModule("CUSTOMER_WALLET_LOOKUP"); setAgentWalletLookupUsername(""); setAgentWalletLookupResult(null); setAgentCustomerError(""); setAgentCustomerSuccess(""); }}><b>Customer Wallet Lookup</b><small>Search assigned customer balance & details</small></button>
-</section>
-</>
-) : agentCoinModule === "CUSTOMER_WALLET_LOOKUP" ? (
-<>
-<section className="admin-panel-card admin-wallet-lookup-card">
-  <div className="admin-panel-title">CUSTOMER WALLET LOOKUP</div>
-  <p className="admin-account-detail-intro">Search only your assigned Customer username to view the current wallet balance.</p>
-
-  <div className="admin-wallet-lookup-row">
-    <input
-      className="admin-form-input"
-      type="text"
-      value={agentWalletLookupUsername}
-      onChange={(e) => {
-        setAgentWalletLookupUsername(e.target.value.toLowerCase());
-        setAgentWalletLookupResult(null);
-      }}
-      placeholder="Search customer username..."
-      maxLength={50}
-      disabled={agentWalletLookupLoading}
-    />
-    <button
-      className="admin-small-action"
-      type="button"
-      onClick={lookupAgentCustomerWallet}
-      disabled={agentWalletLookupLoading}
-    >
-      {agentWalletLookupLoading ? "SEARCHING..." : "SEARCH"}
-    </button>
-  </div>
-
-  {agentWalletLookupResult ? (
-    <div className="admin-wallet-result-row">
-      <div>
-        <b>{agentWalletLookupResult.username}</b>
-        <small>{agentWalletLookupResult.customer_code}</small>
-      </div>
-      <div className="admin-wallet-result-balances">
-        <span>Available <strong className="admin-available-value">${agentWalletLookupResult.available_balance.toFixed(2)}</strong></span>
-        <span>Exposure <strong className="admin-exposure-value">${agentWalletLookupResult.exposure_balance.toFixed(2)}</strong></span>
-        <span>Status <strong>{agentWalletLookupResult.status}</strong></span>
-      </div>
-    </div>
-  ) : null}
-</section>
-</>
-) : agentCoinModule === "CHANGE_PASSWORD" ? (
-<section className="admin-panel-card">
-  <div className="admin-panel-title-row"><div className="admin-panel-title">CHANGE PASSWORD</div><button className="admin-small-action" type="button" onClick={() => setAgentCoinModule("OVERVIEW")}>BACK</button></div>
-  <div className="admin-form">
-    <div className="admin-form-field"><label>CURRENT PASSWORD</label><input className="admin-form-input" type="password" value={passwordResetCurrent} onChange={(e)=>setPasswordResetCurrent(e.target.value)} maxLength={16} /></div>
-    <div className="admin-form-field"><label>NEW PASSWORD</label><input className="admin-form-input" type="password" value={passwordResetNew} onChange={(e)=>setPasswordResetNew(e.target.value)} maxLength={16} /></div>
-    <div className="admin-form-field"><label>REPEAT NEW PASSWORD</label><input className="admin-form-input" type="password" value={passwordResetConfirm} onChange={(e)=>setPasswordResetConfirm(e.target.value)} maxLength={16} /></div>
-    {passwordResetError ? <div className="admin-error">{passwordResetError}</div> : null}{passwordResetSuccess ? <div className="admin-success">{passwordResetSuccess}</div> : null}
-    <button className="admin-create-btn" type="button" onClick={()=>void verifyCurrentPasswordAndUpdate(false)} disabled={passwordResetLoading}>{passwordResetLoading ? "UPDATING..." : "UPDATE PASSWORD"}</button>
-  </div>
-</section>
-) : agentCoinModule === "PASSWORD_RESET" ? (
-<section className="admin-panel-card">
-  <div className="admin-panel-title-row"><div className="admin-panel-title">CUSTOMER PASSWORD RESET</div><button className="admin-small-action" type="button" onClick={() => setAgentCoinModule("OVERVIEW")}>BACK</button></div>
-  <div className="admin-form">
-    <div className="admin-form-field"><label>CUSTOMER</label><select className="admin-form-input" value={adminPasswordResetTarget} onChange={(e)=>setAdminPasswordResetTarget(e.target.value)}><option value="">Select Customer</option>{agentAllCustomers.filter(c=>c.status==="ACTIVE").map(c=><option key={c.profile_id} value={c.profile_id}>{c.username} — {c.customer_code}</option>)}</select></div>
-    <div className="admin-form-field"><label>NEW PASSWORD</label><input className="admin-form-input" type="password" value={adminPasswordResetPassword} onChange={(e)=>setAdminPasswordResetPassword(e.target.value)} maxLength={16} placeholder="8–16 characters" /></div>
-    <div className="admin-form-note">Backend password-reset action will be connected in the next backend step. No password is changed by this UI yet.</div>
-  </div>
-</section>
-) : (
-renderAgentCustomerCoinModule()
-)}
-</main>
-</div>
-);
+  );
+};
 
 const renderCustomerArea = () => {
 
