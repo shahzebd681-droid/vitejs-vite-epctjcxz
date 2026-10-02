@@ -2625,6 +2625,9 @@ try {
   const { error: updateError } = await supabase.auth.updateUser({ password: passwordResetNew });
   if (updateError) throw updateError;
 
+  const { error: completeError } = await supabase.rpc("complete_my_password_change");
+  if (completeError) throw completeError;
+
   setPasswordResetCurrent("");
   setPasswordResetNew("");
   setPasswordResetConfirm("");
@@ -2639,7 +2642,7 @@ try {
 };
 
 const loadAuthenticatedAccount = async (user: { id: string; email?: string | null; user_metadata?: Record<string, unknown> }) => {
-const { data: profileRows, error: profileError } = await supabase.rpc("get_my_profile");
+const { data: profileRows, error: profileError } = await supabase.rpc("get_my_auth_profile");
 if (profileError) throw profileError;
 const profile = Array.isArray(profileRows) ? profileRows[0] : profileRows;
 if (!profile) throw new Error("Profile was not found for the signed-in user.");
