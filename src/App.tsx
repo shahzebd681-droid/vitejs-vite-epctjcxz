@@ -996,7 +996,6 @@ const [allocationAmount, setAllocationAmount] = useState("");
 const [allocationNote, setAllocationNote] = useState("");
 
 // Agent Admin customer management
-const [agentStats, setAgentStats] = useState({ customers: 0, available: 0, exposure: 0 });
 const [agentDashboardModule, setAgentDashboardModule] = useState<"HOME" | "ACCOUNT_OVERVIEW" | "CUSTOMERS" | "CREATE_CUSTOMER" | "DEPOSIT_WITHDRAW" | "BET_HISTORY" | "EXPOSURE" | "PASSWORD_RESET">("HOME");
 const [agentOverviewStats, setAgentOverviewStats] = useState({ agentAvailable: 0, customerAvailable: 0, customerExposure: 0, customers: 0 });
 const [agentCustomerSearchTotal, setAgentCustomerSearchTotal] = useState(0);
@@ -1028,20 +1027,10 @@ const [agentCustomerEmail, setAgentCustomerEmail] = useState("");
 const [agentCustomerPassword, setAgentCustomerPassword] = useState("");
 const [agentCustomerConfirmPassword, setAgentCustomerConfirmPassword] = useState("");
 const [showAgentCustomerForm, setShowAgentCustomerForm] = useState(false);
-const [agentCoinModule, setAgentCoinModule] = useState<"OVERVIEW" | "DEPOSIT_CUSTOMER" | "WITHDRAW_CUSTOMER" | "CUSTOMER_WALLET_LOOKUP" | "PASSWORD_RESET" | "CHANGE_PASSWORD">("OVERVIEW");
+const [agentCoinModule, setAgentCoinModule] = useState<"OVERVIEW" | "DEPOSIT_CUSTOMER" | "WITHDRAW_CUSTOMER" | "PASSWORD_RESET" | "CHANGE_PASSWORD">("OVERVIEW");
 const [agentCoinCustomerProfileId, setAgentCoinCustomerProfileId] = useState("");
 const [agentCoinAmount, setAgentCoinAmount] = useState("");
 const [agentCoinNote, setAgentCoinNote] = useState("");
-
-const [agentWalletLookupUsername, setAgentWalletLookupUsername] = useState("");
-const [agentWalletLookupLoading, setAgentWalletLookupLoading] = useState(false);
-const [agentWalletLookupResult, setAgentWalletLookupResult] = useState<{
-  username: string;
-  customer_code: string;
-  available_balance: number;
-  exposure_balance: number;
-  status: string;
-} | null>(null);
 
 const getFreshAgentAdminAccessToken = async () => {
   const { data, error } = await supabase.auth.getSession();
@@ -1402,7 +1391,6 @@ const loadAgentAccountOverview = async () => {
       customers: Number(count || 0),
     });
     setAgentExposureRows(exposureRows);
-    setAgentStats({ customers: Number(count || 0), available: agentAvailable, exposure: customerExposure });
   } catch (error: any) {
     setAgentCustomerError(error?.message || String(error));
   }
@@ -1473,52 +1461,6 @@ const createAgentCustomer = async () => {
     setAgentCustomerError(error?.message || String(error));
   } finally {
     setAgentCustomerLoading(false);
-  }
-};
-
-const lookupAgentCustomerWallet = async () => {
-  setAgentCustomerError("");
-  setAgentWalletLookupResult(null);
-
-  const username = agentWalletLookupUsername.trim().toLowerCase();
-
-  if (!username) {
-    setAgentCustomerError("Please enter a Customer username.");
-    return;
-  }
-
-  setAgentWalletLookupLoading(true);
-
-  try {
-    const accessToken = await getFreshAgentAdminAccessToken();
-
-    const { data, error } = await supabase.functions.invoke(
-      "agent-customer-admin",
-      {
-        headers: { Authorization: `Bearer ${accessToken}` },
-        body: {
-          action: "lookup",
-          username,
-        },
-      }
-    );
-
-    if (error) throw error;
-    if (!data?.success) {
-      throw new Error(data?.error || "Customer was not found.");
-    }
-
-    setAgentWalletLookupResult({
-      username: data.customer?.username || username,
-      customer_code: data.customer?.customer_code || "N/A",
-      available_balance: Number(data.wallet?.available_balance || 0),
-      exposure_balance: Number(data.wallet?.exposure_balance || 0),
-      status: data.wallet?.status || "NO_WALLET",
-    });
-  } catch (error: any) {
-    setAgentCustomerError(error?.message || String(error));
-  } finally {
-    setAgentWalletLookupLoading(false);
   }
 };
 
