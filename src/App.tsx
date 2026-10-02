@@ -1726,6 +1726,7 @@ type TodayPlayableSession = {
 
 const [todayPlayableSessions, setTodayPlayableSessions] = useState<TodayPlayableSession[]>([]);
 const [todaySessionsReady, setTodaySessionsReady] = useState(false);
+const [todayResultsReady, setTodayResultsReady] = useState(false);
 
 type TodayGameResult = {
   session_id: string;
@@ -15431,8 +15432,8 @@ PUBLIC GAME PREVIEW
                 )
               )
               .map((bazi) => {
-                const available = isGameAvailableToday(publicSelectedGame, bazi.no);
-                const running = getSessionStatus(publicSelectedGame, bazi.no) === "RUNNING";
+                const available = isGameAvailableToday(publicSelectedGame as "Main Bazar" | "Kolkata Fatafat" | "Dus ka Dum", bazi.no);
+                const running = getSessionStatus(publicSelectedGame as "Main Bazar" | "Kolkata Fatafat" | "Dus ka Dum", bazi.no) === "RUNNING";
 
                 return (
                   <div className="public-session-card" key={bazi.no}>
