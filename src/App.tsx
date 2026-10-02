@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./lib/supabase";
 
 
@@ -1745,6 +1745,7 @@ type AppNavigationHistoryState = {
   userRole: "SUPER_ADMIN" | "AGENT_ADMIN" | "CUSTOMER" | null;
   customerPage: Page;
   customerSelectedGame: GameName | null;
+  publicSelectedGame: GameName | null;
   adminModule: typeof adminModule;
   superAdminAccountView: "CUSTOMER" | "AGENT" | null;
   betAnalyzerView: typeof betAnalyzerView;
@@ -1759,7 +1760,7 @@ const lastNavigationKey = useRef("");
 
 useEffect(() => {
   const getNavigationKey = () => {
-    if (!isLoggedIn || !userRole) return "PUBLIC";
+    if (!isLoggedIn || !userRole) return `PUBLIC:${publicSelectedGame || "NONE"}`;
 
     if (userRole === "CUSTOMER") {
       return `CUSTOMER:${customerPage}:${customerSelectedGame || "NONE"}`;
@@ -1777,6 +1778,7 @@ useEffect(() => {
     userRole,
     customerPage,
     customerSelectedGame,
+    publicSelectedGame,
     adminModule,
     superAdminAccountView,
     betAnalyzerView,
@@ -1803,6 +1805,12 @@ useEffect(() => {
     const state = event.state as Partial<AppNavigationHistoryState> | null;
 
     if (!state?.apnaMatkaNavigation) return;
+
+    if (!state.userRole && !userRole && !isLoggedIn) {
+      applyingBrowserBack.current = true;
+      setPublicSelectedGame(state.publicSelectedGame || null);
+      return;
+    }
 
     if (state.userRole === "CUSTOMER" && userRole === "CUSTOMER") {
       applyingBrowserBack.current = true;
@@ -1837,6 +1845,7 @@ useEffect(() => {
   userRole,
   customerPage,
   customerSelectedGame,
+  publicSelectedGame,
   adminModule,
   superAdminAccountView,
   betAnalyzerView,
@@ -2793,7 +2802,7 @@ const openCustomerPage = (page: Page) => {
 
 const selectCustomerGame = (game: GameName) => {
   setCustomerPage("home");
-  setCustomerSelectedGame(game);
+  setCustomerSelectedGame((current) => (current === game ? null : game));
 };
 
 const getGameSessionStatus = (game: GameName) => {
@@ -3394,17 +3403,20 @@ const renderPublicGameCards = () => (
       const count = getGameSessionCount(game);
       const isSelected = publicSelectedGame === game;
       return (
-        <button key={game} type="button" className={`public-game-selector ${isSelected ? "selected" : ""}`} onClick={() => setPublicSelectedGame(game)}>
-          <div className="public-game-selector-top">
-            <span className={`public-game-selector-icon ${game === "Main Bazar" ? "main" : game === "Kolkata Fatafat" ? "kolkata" : "dus"}`}>
-              {game === "Main Bazar" ? "♛" : game === "Kolkata Fatafat" ? "♜" : "🎲"}
-            </span>
-            <span className={`public-game-selector-status ${status === "OPEN FOR BETTING" ? "open" : status === "LOCKED" ? "locked" : "off"}`}>{status}</span>
-          </div>
-          <strong>{game}</strong>
-          <span>{new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</span>
-          <small>{status === "LOADING" ? "Checking today's sessions..." : status === "GAME OFF" ? "No session scheduled today" : `${count} session${count === 1 ? "" : "s"} • ${getGameScheduleLabel(game)}`}</small>
-        </button>
+        <Fragment key={game}>
+          <button type="button" className={`public-game-selector ${isSelected ? "selected" : ""}`} onClick={() => setPublicSelectedGame((current) => (current === game ? null : game))}>
+            <div className="public-game-selector-top">
+              <span className={`public-game-selector-icon ${game === "Main Bazar" ? "main" : game === "Kolkata Fatafat" ? "kolkata" : "dus"}`}>
+                {game === "Main Bazar" ? "♛" : game === "Kolkata Fatafat" ? "♜" : "🎲"}
+              </span>
+              <span className={`public-game-selector-status ${status === "OPEN FOR BETTING" ? "open" : status === "LOCKED" ? "locked" : "off"}`}>{status}</span>
+            </div>
+            <strong>{game}</strong>
+            <span>{new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</span>
+            <small>{status === "LOADING" ? "Checking today's sessions..." : status === "GAME OFF" ? "No session scheduled today" : `${count} session${count === 1 ? "" : "s"} • ${getGameScheduleLabel(game)}`}</small>
+          </button>
+          {isSelected ? renderPublicSelectedGame() : null}
+        </Fragment>
       );
     })}
   </div>
@@ -3511,15 +3523,10 @@ aria-label="Refresh"
 className="profile-mini-btn"
 type="button"
 onClick={() => openCustomerPage("profile")}
+aria-label="Profile"
+title="Profile"
 >
-PROFILE
-</button>
-<button
-className="customer-logout-btn"
-type="button"
-onClick={logoutCustomer}
->
-LOGOUT
+👤
 </button>
 </div>
 
@@ -4201,17 +4208,20 @@ const renderCustomerGameCards = () => (
       const count = getGameSessionCount(game);
       const isSelected = customerSelectedGame === game;
       return (
-        <button key={game} type="button" className={`customer-game-selector ${isSelected ? "selected" : ""}`} onClick={() => selectCustomerGame(game)}>
-          <div className="customer-game-selector-top">
-            <span className={`customer-game-selector-icon ${game === "Main Bazar" ? "main" : game === "Kolkata Fatafat" ? "kolkata" : "dus"}`}>
-              {game === "Main Bazar" ? "♛" : game === "Kolkata Fatafat" ? "♜" : "🎲"}
-            </span>
-            <span className={`customer-game-selector-status ${status === "OPEN FOR BETTING" ? "open" : status === "LOCKED" ? "locked" : "off"}`}>{status}</span>
-          </div>
-          <strong>{game}</strong>
-          <span>{new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</span>
-          <small>{status === "LOADING" ? "Checking today's sessions..." : status === "GAME OFF" ? "No session scheduled today" : `${count} session${count === 1 ? "" : "s"} • ${getGameScheduleLabel(game)}`}</small>
-        </button>
+        <Fragment key={game}>
+          <button type="button" className={`customer-game-selector ${isSelected ? "selected" : ""}`} onClick={() => selectCustomerGame(game)}>
+            <div className="customer-game-selector-top">
+              <span className={`customer-game-selector-icon ${game === "Main Bazar" ? "main" : game === "Kolkata Fatafat" ? "kolkata" : "dus"}`}>
+                {game === "Main Bazar" ? "♛" : game === "Kolkata Fatafat" ? "♜" : "🎲"}
+              </span>
+              <span className={`customer-game-selector-status ${status === "OPEN FOR BETTING" ? "open" : status === "LOCKED" ? "locked" : "off"}`}>{status}</span>
+            </div>
+            <strong>{game}</strong>
+            <span>{new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</span>
+            <small>{status === "LOADING" ? "Checking today's sessions..." : status === "GAME OFF" ? "No session scheduled today" : `${count} session${count === 1 ? "" : "s"} • ${getGameScheduleLabel(game)}`}</small>
+          </button>
+          {isSelected ? renderCustomerSelectedGame() : null}
+        </Fragment>
       );
     })}
   </div>
@@ -4258,7 +4268,6 @@ const renderCustomerHome = () => (
       {renderCustomerNav()}
       <div className="customer-section-title">TODAY'S GAMES</div>
       {renderCustomerGameCards()}
-      {renderCustomerSelectedGame()}
       <div className="customer-notice">
         Virtual USD coin game only.<br />
         No customer Deposit or Withdrawal option is available in this customer interface.
@@ -13999,17 +14008,14 @@ color: #111;
 }
 
 .profile-mini-btn{
-  width:auto;
-  min-width:58px;
-  padding:0 9px;
-  border-radius:9px;
-}
-
-.customer-logout-btn{
-  padding:0 10px;
-  color:#fff;
-  border-color:rgba(255,82,82,.72);
-  background:linear-gradient(135deg,#47151b,#8d222b);
+  width:34px;
+  min-width:34px;
+  height:38px;
+  padding:0;
+  border-radius:50%;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
 }
 
 .customer-main{
@@ -14120,8 +14126,7 @@ color: #111;
   .main-market,.customer-market{min-height:108px;padding:9px;}
   .bazi-box,.customer-bazi-box{min-height:86px;padding:9px;}
   .customer-header-actions{gap:4px;}
-  .profile-mini-btn{min-width:52px;padding:0 7px;font-size:8px;}
-  .customer-logout-btn{padding:0 8px;font-size:8px;}
+  .profile-mini-btn{width:34px;min-width:34px;padding:0;font-size:16px;}
 }
 
 @media (max-width:390px){
@@ -15037,6 +15042,123 @@ color: #111;
 }
 
 
+
+/* =========================================================
+   CONFIRMED GAME SESSION PLACEMENT + CUSTOMER HEADER
+   ========================================================= */
+.public-game-selector-grid > .public-selected-game-card,
+.customer-game-selector-grid > .customer-selected-game-card{
+  grid-column:1 / -1;
+}
+
+.customer-header-inner{
+  min-width:0;
+}
+.customer-header .brand-lockup{
+  min-width:0;
+  flex:1 1 auto;
+}
+.customer-header .brand-lockup > div{
+  min-width:0;
+}
+.customer-header .customer-brand{
+  white-space:nowrap;
+}
+.customer-header-balances{
+  flex:0 0 auto;
+  gap:4px;
+}
+.customer-header-balances > div{
+  min-width:62px;
+  padding:4px 5px;
+  flex:0 0 auto;
+}
+.customer-header-balances span{
+  font-size:6px;
+}
+.customer-header-balances strong{
+  font-size:9px;
+}
+.customer-header-actions{
+  flex:0 0 auto;
+  gap:4px;
+}
+.customer-header .customer-refresh-btn,
+.customer-header .profile-mini-btn{
+  width:34px;
+  min-width:34px;
+  height:34px;
+  padding:0;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+}
+.customer-header .customer-refresh-btn{
+  font-size:18px;
+}
+.customer-header .profile-mini-btn{
+  font-size:16px;
+}
+
+@media (max-width:760px){
+  .customer-header-balances{
+    order:initial;
+    width:auto;
+    margin-left:auto;
+  }
+  .customer-header-balances > div{
+    flex:0 0 auto;
+  }
+}
+
+@media (max-width:560px){
+  .customer-header-inner{
+    gap:4px;
+  }
+  .customer-header .brand-crown{
+    font-size:27px;
+  }
+  .customer-header .customer-brand{
+    font-size:18px;
+    letter-spacing:.6px;
+  }
+  .customer-header .customer-subtitle{
+    font-size:6px;
+    letter-spacing:1px;
+  }
+  .customer-header-balances{
+    gap:3px;
+  }
+  .customer-header-balances > div{
+    min-width:58px;
+    padding:4px;
+  }
+  .customer-header-balances strong{
+    font-size:8px;
+  }
+}
+
+@media (max-width:390px){
+  .customer-header .brand-crown{
+    font-size:24px;
+  }
+  .customer-header .customer-brand{
+    font-size:16px;
+  }
+  .customer-header .customer-subtitle{
+    font-size:5px;
+  }
+  .customer-header-balances > div{
+    min-width:53px;
+  }
+  .customer-header .customer-refresh-btn,
+  .customer-header .profile-mini-btn{
+    width:31px;
+    min-width:31px;
+    height:31px;
+  }
+}
+
 `}
 </style>
 
@@ -15226,7 +15348,6 @@ PUBLIC GAME PREVIEW
 
 <main className="games">
   {renderPublicGameCards()}
-  {renderPublicSelectedGame()}
 </main>
 
 {/* =================================================
