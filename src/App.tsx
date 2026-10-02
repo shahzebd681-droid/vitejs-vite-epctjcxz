@@ -651,6 +651,8 @@ type Page =
 
 | "home"
 
+| "game"
+
 
 | "betting"
 
@@ -1610,6 +1612,8 @@ const [customerRefreshLoading, setCustomerRefreshLoading] = useState(false);
 
 const [selectedGame, setSelectedGame] = useState("");
 
+const [publicSelectedGame, setPublicSelectedGame] = useState<string | null>(null);
+
 
 const [selectedMarket, setSelectedMarket] = useState("");
 
@@ -1734,7 +1738,6 @@ type TodayGameResult = {
 };
 
 const [todayGameResults, setTodayGameResults] = useState<TodayGameResult[]>([]);
-const [todayResultsReady, setTodayResultsReady] = useState(false);
 
 type AppNavigationHistoryState = {
   apnaMatkaNavigation: true;
@@ -2175,7 +2178,6 @@ Sunday = 0
 
 
 
-const dayNumber = currentTime.getDay();
 
 
 const isGameAvailableToday = (
@@ -8985,6 +8987,10 @@ const renderAgentAdminArea = () => {
 };
 
 const renderCustomerArea = () => {
+
+if (customerPage === "game") {
+  return renderCustomerSelectedGame();
+}
 
 
 if (customerPage === "betting") {
