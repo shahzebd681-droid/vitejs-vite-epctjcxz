@@ -6720,7 +6720,7 @@ const resetAgentCustomerPassword = async () => {
     const accessToken = await getFreshAgentAdminAccessToken();
 
     const { data, error } = await supabase.functions.invoke("agent-customer-admin", {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: { Authorization: "Bearer " + accessToken },
       body: {
         action: "reset_customer_password",
         profile_id: targetProfileId,
@@ -6734,7 +6734,7 @@ const resetAgentCustomerPassword = async () => {
     }
 
     setAgentCustomerSuccess(
-      `Customer ${targetCustomer.username} password reset successfully.`
+      "Customer " + String(targetCustomer.username || "") + " password reset successfully."
     );
     setAdminPasswordResetPassword("");
   } catch (error: any) {
@@ -15984,4 +15984,3 @@ onChange={(event) => setConfirmPassword(event.target.value)}
 
 export default App;
 
-`
