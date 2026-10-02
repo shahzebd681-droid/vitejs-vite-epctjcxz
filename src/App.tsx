@@ -651,8 +651,6 @@ type Page =
 
 | "home"
 
-| "game"
-
 
 | "betting"
 
@@ -664,6 +662,9 @@ type Page =
 
 
 | "statement";
+
+
+type GameName = "Main Bazar" | "Kolkata Fatafat" | "Dus ka Dum";
 
 
 type BetType =
@@ -1611,8 +1612,8 @@ const [customerRefreshLoading, setCustomerRefreshLoading] = useState(false);
 
 
 const [selectedGame, setSelectedGame] = useState("");
-
-const [publicSelectedGame, setPublicSelectedGame] = useState<string | null>(null);
+const [publicSelectedGame, setPublicSelectedGame] = useState<GameName | null>(null);
+const [customerSelectedGame, setCustomerSelectedGame] = useState<GameName | null>(null);
 
 
 const [selectedMarket, setSelectedMarket] = useState("");
@@ -1726,7 +1727,6 @@ type TodayPlayableSession = {
 
 const [todayPlayableSessions, setTodayPlayableSessions] = useState<TodayPlayableSession[]>([]);
 const [todaySessionsReady, setTodaySessionsReady] = useState(false);
-const [todayResultsReady, setTodayResultsReady] = useState(false);
 
 type TodayGameResult = {
   session_id: string;
@@ -1739,20 +1739,19 @@ type TodayGameResult = {
 };
 
 const [todayGameResults, setTodayGameResults] = useState<TodayGameResult[]>([]);
+const [todayResultsReady, setTodayResultsReady] = useState(false);
 
 type AppNavigationHistoryState = {
   apnaMatkaNavigation: true;
   userRole: "SUPER_ADMIN" | "AGENT_ADMIN" | "CUSTOMER" | null;
   customerPage: Page;
+  customerSelectedGame: GameName | null;
   adminModule: typeof adminModule;
   superAdminAccountView: "CUSTOMER" | "AGENT" | null;
   betAnalyzerView: typeof betAnalyzerView;
   agentDashboardModule: typeof agentDashboardModule;
   agentCoinModule: typeof agentCoinModule;
   showAgentCustomerForm: boolean;
-  selectedGame: string;
-  selectedMarket: string;
-  selectedBazi: number | null;
 };
 
 const navigationHistoryInitialized = useRef(false);
@@ -1764,7 +1763,7 @@ useEffect(() => {
     if (!isLoggedIn || !userRole) return "PUBLIC";
 
     if (userRole === "CUSTOMER") {
-      return `CUSTOMER:${customerPage}:${selectedGame}:${selectedMarket}:${selectedBazi ?? "NONE"}`;
+      return `CUSTOMER:${customerPage}:${customerSelectedGame || "NONE"}`;
     }
 
     if (userRole === "SUPER_ADMIN") {
@@ -1778,15 +1777,13 @@ useEffect(() => {
     apnaMatkaNavigation: true,
     userRole,
     customerPage,
+    customerSelectedGame,
     adminModule,
     superAdminAccountView,
     betAnalyzerView,
     agentDashboardModule,
     agentCoinModule,
     showAgentCustomerForm,
-    selectedGame,
-    selectedMarket,
-    selectedBazi,
   });
 
   const navigationKey = getNavigationKey();
@@ -1811,9 +1808,7 @@ useEffect(() => {
     if (state.userRole === "CUSTOMER" && userRole === "CUSTOMER") {
       applyingBrowserBack.current = true;
       setCustomerPage(state.customerPage || "home");
-      setSelectedGame(state.selectedGame || "");
-      setSelectedMarket(state.selectedMarket || "");
-      setSelectedBazi(state.selectedBazi == null ? null : Number(state.selectedBazi));
+      setCustomerSelectedGame(state.customerSelectedGame || null);
       return;
     }
 
@@ -1842,15 +1837,13 @@ useEffect(() => {
   isLoggedIn,
   userRole,
   customerPage,
+  customerSelectedGame,
   adminModule,
   superAdminAccountView,
   betAnalyzerView,
   agentDashboardModule,
   agentCoinModule,
   showAgentCustomerForm,
-  selectedGame,
-  selectedMarket,
-  selectedBazi,
 ]);
 
 
@@ -2179,6 +2172,7 @@ Sunday = 0
 
 
 
+const dayNumber = currentTime.getDay();
 
 
 const isGameAvailableToday = (
@@ -2798,11 +2792,33 @@ CUSTOMER NAVIGATION
 
 
 const openCustomerPage = (page: Page) => {
+  setCustomerPage(page);
+  if (page !== "home") setCustomerSelectedGame(null);
+};
 
+const selectCustomerGame = (game: GameName) => {
+  setCustomerPage("home");
+  setCustomerSelectedGame(game);
+};
 
-setCustomerPage(page);
+const getGameSessionStatus = (game: GameName) => {
+  if (!todaySessionsReady) return "LOADING";
+  const sessions = todayPlayableSessions.filter((session) => session.game === game);
+  if (sessions.length === 0) return "GAME OFF";
+  return sessions.some((session) => getSessionStatus(
+    game,
+    session.bazi_no,
+    game === "Main Bazar" ? session.market : ""
+  ) === "RUNNING") ? "OPEN FOR BETTING" : "LOCKED";
+};
 
+const getGameSessionCount = (game: GameName) =>
+  todayPlayableSessions.filter((session) => session.game === game).length;
 
+const getGameScheduleLabel = (game: GameName) => {
+  if (game === "Main Bazar") return "Open / Close";
+  if (game === "Kolkata Fatafat") return dayNumber === 0 ? "Bazi 1–4" : "Bazi 1–8";
+  return dayNumber === 0 ? "Bazi 1–5" : "Bazi 1–10";
 };
 
 
@@ -3376,6 +3392,85 @@ selectedGame ===
 
 
 
+const renderPublicGameCards = () => (
+  <div className="public-game-selector-grid">
+    {(["Main Bazar", "Kolkata Fatafat", "Dus ka Dum"] as GameName[]).map((game) => {
+      const status = getGameSessionStatus(game);
+      const count = getGameSessionCount(game);
+      const isSelected = publicSelectedGame === game;
+      return (
+        <button key={game} type="button" className={`public-game-selector ${isSelected ? "selected" : ""}`} onClick={() => setPublicSelectedGame(game)}>
+          <div className="public-game-selector-top">
+            <span className={`public-game-selector-icon ${game === "Main Bazar" ? "main" : game === "Kolkata Fatafat" ? "kolkata" : "dus"}`}>
+              {game === "Main Bazar" ? "♛" : game === "Kolkata Fatafat" ? "♜" : "🎲"}
+            </span>
+            <span className={`public-game-selector-status ${status === "OPEN FOR BETTING" ? "open" : status === "LOCKED" ? "locked" : "off"}`}>{status}</span>
+          </div>
+          <strong>{game}</strong>
+          <span>{new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</span>
+          <small>{status === "LOADING" ? "Checking today's sessions..." : status === "GAME OFF" ? "No session scheduled today" : `${count} session${count === 1 ? "" : "s"} • ${getGameScheduleLabel(game)}`}</small>
+        </button>
+      );
+    })}
+  </div>
+);
+
+const renderPublicMainMarket = (market: string, deadline: string) => {
+  const available = isGameAvailableToday("Main Bazar", null, market);
+  const running = getSessionStatus("Main Bazar", null, market) === "RUNNING";
+  return (
+    <div className="public-session-card">
+      <div className="public-session-top"><strong>{market}</strong><span>Deadline {deadline}</span></div>
+      <div className={running ? "public-session-status open" : available ? "public-session-status locked" : "public-session-status off"}>
+        {running ? <><span className="green-dot" /> OPEN FOR BETTING</> : available ? "LOCKED" : "GAME OFF"}
+      </div>
+      <div className="result-line">Result: <span className="result-value">{formatTodayResult(getTodayGameResult("Main Bazar", null, market))}</span></div>
+      {running ? <button className="play-btn" onClick={openLogin}>LOGIN TO PLAY</button> : null}
+    </div>
+  );
+};
+
+const renderPublicBazi = (game: "Kolkata Fatafat" | "Dus ka Dum", bazi: { no: number; time: string }) => {
+  const available = isGameAvailableToday(game, bazi.no);
+  const running = getSessionStatus(game, bazi.no) === "RUNNING";
+  return (
+    <div className="public-session-card">
+      <div className="public-session-top"><strong>Bazi {bazi.no}</strong><span>{bazi.time}</span></div>
+      <div className={running ? "public-session-status open" : available ? "public-session-status locked" : "public-session-status off"}>
+        {running ? <><span className="green-dot" /> OPEN FOR BETTING</> : available ? "LOCKED" : "GAME OFF"}
+      </div>
+      <div className="result-line">Result: <span className="result-value">{formatTodayResult(getTodayGameResult(game, bazi.no))}</span></div>
+      {running ? <button className="play-btn" onClick={openLogin}>LOGIN TO PLAY</button> : null}
+    </div>
+  );
+};
+
+const renderPublicSelectedGame = () => {
+  if (!publicSelectedGame) return null;
+  const game = publicSelectedGame;
+  const configuredKolkata = dayNumber === 0 ? kolkataBazi.slice(0, 4) : kolkataBazi;
+  const configuredDus = dayNumber === 0 ? dusBazi.slice(0, 5) : dusBazi;
+  return (
+    <section className="public-selected-game-card">
+      <div className="public-selected-game-head">
+        <div>
+          <div className="today-title">SELECTED GAME</div>
+          <h2>{game}</h2>
+          <p>{getGameScheduleLabel(game)} • {new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</p>
+        </div>
+        <button type="button" className="public-back-games" onClick={() => setPublicSelectedGame(null)}>BACK TO GAMES</button>
+      </div>
+      {game === "Main Bazar" ? (
+        <div className="public-session-grid">{mainBazarMarkets.map((market) => renderPublicMainMarket(market.market, market.time))}</div>
+      ) : game === "Kolkata Fatafat" ? (
+        <div className="public-session-grid">{configuredKolkata.map((bazi) => renderPublicBazi("Kolkata Fatafat", bazi))}</div>
+      ) : (
+        <div className="public-session-grid">{configuredDus.map((bazi) => renderPublicBazi("Dus ka Dum", bazi))}</div>
+      )}
+    </section>
+  );
+};
+
 /* =========================================================
 
 
@@ -3388,52 +3483,61 @@ HEADER
 
 
 const renderCustomerHeader = () => (
-<header className="customer-header">
-  <div className="customer-header-inner">
-    <div className="brand-lockup">
-      <span className="brand-crown">♛</span>
-      <div>
-        <div className="customer-brand"><span className="brand-light">APNA</span> MATKA</div>
-        <div className="customer-subtitle">VIRTUAL USD COIN GAMES</div>
-      </div>
-    </div>
 
-    <div className="customer-header-actions">
-      <div className="customer-header-balance">
-        <span>WALLET</span>
-        <strong>${walletBalance.toFixed(2)}</strong>
-      </div>
-      <div className="customer-header-balance exposure">
-        <span>EXPOSURE</span>
-        <strong>${exposureBalance.toFixed(2)}</strong>
-      </div>
-      <button
-        className="customer-refresh-btn"
-        type="button"
-        onClick={refreshCustomerDashboard}
-        disabled={customerRefreshLoading}
-        aria-label="Refresh"
-      >
-        {customerRefreshLoading ? "..." : "↻"}
-      </button>
-      <button
-        className="profile-mini-btn"
-        type="button"
-        onClick={() => openCustomerPage("profile")}
-      >
-        PROFILE
-      </button>
-      <button
-        className="customer-logout-btn"
-        type="button"
-        onClick={logoutCustomer}
-      >
-        LOGOUT
-      </button>
-    </div>
-  </div>
+
+<header className="customer-header">
+
+
+<div className="customer-header-inner">
+
+
+<div className="brand-lockup">
+<span className="brand-crown">♛</span>
+<div>
+<div className="customer-brand"><span className="brand-light">APNA</span> MATKA</div>
+<div className="customer-subtitle">VIRTUAL USD COIN GAMES</div>
+</div>
+</div>
+<div className="customer-header-balances">
+  <div><span>WALLET</span><strong>${walletBalance.toFixed(2)}</strong></div>
+  <div><span>EXPOSURE</span><strong>${exposureBalance.toFixed(2)}</strong></div>
+</div>
+<div className="customer-header-actions">
+<button
+className="customer-refresh-btn"
+type="button"
+onClick={refreshCustomerDashboard}
+disabled={customerRefreshLoading}
+aria-label="Refresh"
+>
+{customerRefreshLoading ? "..." : "↻"}
+</button>
+<button
+className="profile-mini-btn"
+type="button"
+onClick={() => openCustomerPage("profile")}
+>
+PROFILE
+</button>
+<button
+className="customer-logout-btn"
+type="button"
+onClick={logoutCustomer}
+>
+LOGOUT
+</button>
+</div>
+
+
+</div>
+
+
 </header>
+
+
 );
+
+
 
 
 /* =========================================================
@@ -4095,210 +4199,84 @@ CUSTOMER HOME
 
 
 
-const getGameSummary = (game: string) => {
-  const sessions = todayPlayableSessions.filter((session) => session.game === game);
-  const running = sessions.some((session) => {
-    if (game === "Main Bazar") {
-      return getSessionStatus(game, null, session.market) === "RUNNING";
-    }
-    return getSessionStatus(game, session.bazi_no) === "RUNNING";
-  });
-
-  return {
-    available: sessions.length > 0,
-    running,
-    sessionCount: sessions.length,
-  };
-};
-
-const formatGameDate = () =>
-  new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(new Date());
-
-const renderCustomerGameCard = (game: "Main Bazar" | "Kolkata Fatafat" | "Dus ka Dum") => {
-  const summary = getGameSummary(game);
-
-  const subtitle =
-    game === "Main Bazar"
-      ? "Open / Close"
-      : game === "Kolkata Fatafat"
-        ? "Bazi 1–8"
-        : "Bazi 1–10";
-
-  return (
-    <button
-      type="button"
-      className="customer-game-select-card"
-      onClick={() => {
-        setSelectedGame(game);
-        setSelectedMarket("");
-        setSelectedBazi(null);
-        setCustomerPage("game");
-      }}
-    >
-      <div className="customer-game-select-top">
-        <div>
-          <div className="customer-game-select-title">{game}</div>
-          <div className="customer-game-select-sub">{subtitle}</div>
-        </div>
-        <span className="customer-game-select-arrow">›</span>
-      </div>
-
-      <div className="customer-game-select-date">{formatGameDate()}</div>
-
-      <div className={`customer-game-overall-status ${
-        !todaySessionsReady
-          ? "loading"
-          : summary.running
-            ? "open"
-            : summary.available
-              ? "locked"
-              : "off"
-      }`}>
-        {!todaySessionsReady ? (
-          "LOADING..."
-        ) : summary.running ? (
-          <>
-            <span className="green-dot" />
-            OPEN FOR BETTING
-          </>
-        ) : summary.available ? (
-          "LOCKED"
-        ) : (
-          "GAME OFF"
-        )}
-      </div>
-
-      <div className="customer-game-select-hint">
-        {summary.available ? "VIEW TODAY'S SESSIONS" : "NO SCHEDULED SESSIONS TODAY"}
-      </div>
-    </button>
-  );
-};
+const renderCustomerGameCards = () => (
+  <div className="customer-game-selector-grid">
+    {(["Main Bazar", "Kolkata Fatafat", "Dus ka Dum"] as GameName[]).map((game) => {
+      const status = getGameSessionStatus(game);
+      const count = getGameSessionCount(game);
+      const isSelected = customerSelectedGame === game;
+      return (
+        <button key={game} type="button" className={`customer-game-selector ${isSelected ? "selected" : ""}`} onClick={() => selectCustomerGame(game)}>
+          <div className="customer-game-selector-top">
+            <span className={`customer-game-selector-icon ${game === "Main Bazar" ? "main" : game === "Kolkata Fatafat" ? "kolkata" : "dus"}`}>
+              {game === "Main Bazar" ? "♛" : game === "Kolkata Fatafat" ? "♜" : "🎲"}
+            </span>
+            <span className={`customer-game-selector-status ${status === "OPEN FOR BETTING" ? "open" : status === "LOCKED" ? "locked" : "off"}`}>{status}</span>
+          </div>
+          <strong>{game}</strong>
+          <span>{new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</span>
+          <small>{status === "LOADING" ? "Checking today's sessions..." : status === "GAME OFF" ? "No session scheduled today" : `${count} session${count === 1 ? "" : "s"} • ${getGameScheduleLabel(game)}`}</small>
+        </button>
+      );
+    })}
+  </div>
+);
 
 const renderCustomerSelectedGame = () => {
-  const game = selectedGame as "Main Bazar" | "Kolkata Fatafat" | "Dus ka Dum";
-  if (!game) return null;
-
-  const availableSessions = todayPlayableSessions.filter((session) => session.game === game);
+  if (!customerSelectedGame) return null;
+  const game = customerSelectedGame;
+  const configuredKolkata = dayNumber === 0 ? kolkataBazi.slice(0, 4) : kolkataBazi;
+  const configuredDus = dayNumber === 0 ? dusBazi.slice(0, 5) : dusBazi;
 
   return (
-    <>
-      {renderCustomerHeader()}
-
-      <main className="customer-main">
-        <div className="customer-game-detail-toolbar">
-          <button
-            type="button"
-            className="customer-back-games-btn"
-            onClick={() => openCustomerPage("home")}
-          >
-            ← BACK TO GAMES
-          </button>
+    <section className="customer-selected-game-card">
+      <div className="customer-selected-game-head">
+        <div>
+          <div className="customer-section-kicker">SELECTED GAME</div>
+          <h2>{game}</h2>
+          <p>{getGameScheduleLabel(game)} • {new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</p>
         </div>
-
-        <section className="customer-welcome customer-detail-welcome">
-          <div>
-            <div className="customer-welcome-title">
-              {game}
-            </div>
-            <div className="customer-welcome-sub">
-              Today's sessions • {formatGameDate()}
-            </div>
-          </div>
-          <div className="customer-live">
-            LIVE
-          </div>
-        </section>
-
-        <div className="customer-section-title">
-          TODAY'S {game.toUpperCase()} SESSIONS
-        </div>
-
-        {!todaySessionsReady ? (
-          <div className="customer-empty-state">LOADING TODAY'S SESSIONS...</div>
-        ) : availableSessions.length === 0 ? (
-          <div className="customer-empty-state">GAME OFF — NO SCHEDULED SESSIONS TODAY.</div>
-        ) : (
-          <section className="customer-selected-session-list">
-            {game === "Main Bazar" ? (
-              mainBazarMarkets
-                .filter((market) =>
-                  availableSessions.some(
-                    (session) =>
-                      session.market.toUpperCase() === market.market.toUpperCase()
-                  )
-                )
-                .map((market) => (
-                  <div key={market.market} className="customer-selected-session-item">
-                    {renderMainMarket(market.market, market.time)}
-                  </div>
-                ))
-            ) : game === "Kolkata Fatafat" ? (
-              kolkataBazi
-                .filter((bazi) =>
-                  availableSessions.some((session) => session.bazi_no === bazi.no)
-                )
-                .map((bazi) => (
-                  <div key={bazi.no} className="customer-selected-session-item">
-                    {renderBaziBox(game, bazi)}
-                  </div>
-                ))
-            ) : (
-              dusBazi
-                .filter((bazi) =>
-                  availableSessions.some((session) => session.bazi_no === bazi.no)
-                )
-                .map((bazi) => (
-                  <div key={bazi.no} className="customer-selected-session-item">
-                    {renderBaziBox(game, bazi)}
-                  </div>
-                ))
-            )}
-          </section>
-        )}
-      </main>
-
-      {renderCustomerFooter()}
-    </>
+        <button type="button" className="admin-small-action" onClick={() => setCustomerSelectedGame(null)}>BACK TO GAMES</button>
+      </div>
+      {game === "Main Bazar" ? (
+        <div className="customer-main-grid">{mainBazarMarkets.map((market) => renderMainMarket(market.market, market.time))}</div>
+      ) : game === "Kolkata Fatafat" ? (
+        <div className="customer-bazi-grid">{configuredKolkata.map((bazi) => renderBaziBox("Kolkata Fatafat", bazi))}</div>
+      ) : (
+        <div className="customer-bazi-grid">{configuredDus.map((bazi) => renderBaziBox("Dus ka Dum", bazi))}</div>
+      )}
+    </section>
   );
 };
 
 const renderCustomerHome = () => (
   <>
     {renderCustomerHeader()}
-
     <main className="customer-main">
-      <section className="customer-welcome">
+      <div className="customer-welcome">
         <div>
-          <div className="customer-welcome-title">
-            Welcome, {customerName}
-          </div>
-          <div className="customer-welcome-sub">
-            Select a game to view today's sessions and start playing.
-          </div>
+          <div className="customer-welcome-title">Welcome, {customerName}</div>
+          <div className="customer-welcome-sub">Select a game to view its sessions and start your virtual play.</div>
         </div>
         <div className="customer-live">LIVE</div>
-      </section>
-
-      <div className="customer-section-title">
-        TODAY'S GAMES
       </div>
-
-      <section className="customer-game-select-grid">
-        {renderCustomerGameCard("Main Bazar")}
-        {renderCustomerGameCard("Kolkata Fatafat")}
-        {renderCustomerGameCard("Dus ka Dum")}
-      </section>
+      {renderCustomerNav()}
+      <div className="customer-section-title">TODAY'S GAMES</div>
+      {renderCustomerGameCards()}
+      {renderCustomerSelectedGame()}
+      <div className="customer-notice">
+        Virtual USD coin game only.<br />
+        No customer Deposit or Withdrawal option is available in this customer interface.
+      </div>
+      <div className="customer-bottom-nav">
+        <button onClick={() => openCustomerPage("home")}>Home</button>
+        <button onClick={() => openCustomerPage("history")}>History</button>
+        <button onClick={() => openCustomerPage("profile")}>Profile</button>
+      </div>
     </main>
-
     {renderCustomerFooter()}
   </>
 );
-
 
 /* =========================================================
 
@@ -8988,10 +8966,6 @@ const renderAgentAdminArea = () => {
 };
 
 const renderCustomerArea = () => {
-
-if (customerPage === "game") {
-  return renderCustomerSelectedGame();
-}
 
 
 if (customerPage === "betting") {
@@ -14760,348 +14734,316 @@ color: #111;
     padding-right:8px;
   }
 }
-/* ================= CONSOLIDATED GAME SELECT UI ================= */
 
-.customer-header-balance{
-  min-width:78px;
-  padding:7px 10px;
-  border:1px solid rgba(255,210,80,.24);
-  border-radius:10px;
-  background:rgba(255,255,255,.035);
-  text-align:right;
-}
+/* =========================================================
+   GAME SELECTOR / NAVIGATION UI
+========================================================= */
 
-.customer-header-balance span{
-  display:block;
-  font-size:9px;
-  letter-spacing:.12em;
-  color:#a9b0bd;
-  font-weight:800;
-}
-
-.customer-header-balance strong{
-  display:block;
-  margin-top:2px;
-  font-size:13px;
-  color:#48e28b;
-  white-space:nowrap;
-}
-
-.customer-header-balance.exposure strong{
-  color:#ff5b63;
-}
-
-.customer-game-select-grid,
-.public-game-select-grid{
+.public-game-selector-grid,
+.customer-game-selector-grid{
   display:grid;
   grid-template-columns:repeat(3,minmax(0,1fr));
-  gap:14px;
-  margin-top:16px;
-}
-
-.customer-game-select-card,
-.public-game-select-card{
-  width:100%;
-  border:1px solid rgba(255,202,64,.22);
-  border-radius:16px;
-  background:
-    radial-gradient(circle at 100% 0%,rgba(255,193,7,.10),transparent 42%),
-    linear-gradient(145deg,#11151d,#080a0f);
-  color:#fff;
-  padding:17px;
-  text-align:left;
-  cursor:pointer;
-  box-shadow:0 10px 30px rgba(0,0,0,.24);
-  transition:transform .16s ease,border-color .16s ease,box-shadow .16s ease;
-}
-
-.customer-game-select-card:hover,
-.public-game-select-card:hover,
-.public-game-select-card.selected{
-  transform:translateY(-2px);
-  border-color:rgba(255,210,75,.55);
-  box-shadow:0 14px 36px rgba(0,0,0,.34);
-}
-
-.customer-game-select-top,
-.public-game-select-top{
-  display:flex;
-  align-items:flex-start;
-  justify-content:space-between;
   gap:10px;
-}
-
-.customer-game-select-title,
-.public-game-select-top h2{
-  margin:0;
-  font-size:21px;
-  line-height:1.15;
-  color:#ffd34d;
-}
-
-.customer-game-select-sub,
-.public-game-select-sub{
-  margin-top:5px;
-  color:#9ca4b2;
-  font-size:12px;
-}
-
-.customer-game-select-arrow,
-.public-game-select-arrow{
-  font-size:28px;
-  line-height:20px;
-  color:#ffd34d;
-}
-
-.customer-game-select-date,
-.public-game-select-date{
-  margin-top:17px;
-  font-size:12px;
-  color:#d9dde5;
-}
-
-.customer-game-overall-status,
-.public-game-overall-status{
-  margin-top:12px;
-  min-height:36px;
-  display:flex;
-  align-items:center;
-  gap:7px;
-  border-radius:9px;
-  padding:8px 10px;
-  font-size:11px;
-  font-weight:900;
-  letter-spacing:.04em;
-}
-
-.customer-game-overall-status.open,
-.public-game-overall-status.open{
-  color:#4be38d;
-  background:rgba(40,190,100,.10);
-  border:1px solid rgba(70,230,140,.18);
-}
-
-.customer-game-overall-status.locked,
-.public-game-overall-status.locked{
-  color:#ff626b;
-  background:rgba(255,70,80,.08);
-  border:1px solid rgba(255,90,100,.16);
-}
-
-.customer-game-overall-status.off,
-.public-game-overall-status.off{
-  color:#8e96a5;
-  background:rgba(255,255,255,.035);
-  border:1px solid rgba(255,255,255,.07);
-}
-
-.customer-game-overall-status.loading,
-.public-game-overall-status.loading{
-  color:#cbd0da;
-  background:rgba(255,255,255,.035);
-}
-
-.customer-game-select-hint,
-.public-game-select-hint{
-  margin-top:12px;
-  font-size:10px;
-  font-weight:800;
-  letter-spacing:.08em;
-  color:#777f8e;
-}
-
-.customer-game-detail-toolbar{
-  display:flex;
-  justify-content:flex-start;
   margin-bottom:12px;
 }
 
-.customer-back-games-btn,
-.public-close-game-btn{
-  border:1px solid rgba(255,204,60,.25);
-  background:#0d1118;
-  color:#ffd34d;
-  border-radius:9px;
-  padding:9px 12px;
-  font-size:11px;
-  font-weight:900;
-  cursor:pointer;
-}
-
-.customer-detail-welcome{
-  margin-top:4px;
-}
-
-.customer-selected-session-list,
-.public-session-list{
-  display:grid;
-  gap:12px;
-}
-
-.customer-selected-session-item{
+.public-game-selector,
+.customer-game-selector{
   width:100%;
+  min-height:142px;
+  padding:12px;
+  border-radius:13px;
+  border:1px solid rgba(255,194,18,.45);
+  background:linear-gradient(145deg,#111820,#070b10);
+  color:#f4f4f4;
+  text-align:left;
+  cursor:pointer;
+  box-shadow:inset 0 0 18px rgba(255,193,7,.025);
+  transition:transform .15s ease,border-color .15s ease,box-shadow .15s ease;
 }
 
-.customer-empty-state,
-.public-session-empty{
-  padding:22px 14px;
-  border:1px dashed rgba(255,255,255,.10);
-  border-radius:14px;
-  background:rgba(255,255,255,.025);
-  color:#9199a8;
-  text-align:center;
-  font-size:12px;
-  font-weight:800;
+.public-game-selector:hover,
+.customer-game-selector:hover{
+  transform:translateY(-1px);
+  border-color:rgba(255,211,61,.78);
 }
 
-.public-selected-game{
-  margin-top:18px;
-  padding:16px;
-  border:1px solid rgba(255,202,64,.20);
-  border-radius:16px;
-  background:linear-gradient(145deg,rgba(17,21,29,.98),rgba(6,8,12,.98));
+.public-game-selector.selected,
+.customer-game-selector.selected{
+  border-color:#f4c83e;
+  box-shadow:0 0 0 1px rgba(244,200,62,.16),inset 0 0 24px rgba(255,193,7,.06);
 }
 
-.public-selected-game-head{
+.public-game-selector-top,
+.customer-game-selector-top{
   display:flex;
+  align-items:center;
   justify-content:space-between;
-  align-items:flex-start;
-  gap:12px;
-  margin-bottom:14px;
+  gap:7px;
+  margin-bottom:10px;
 }
 
-.public-selected-kicker{
-  color:#9ca4b2;
-  font-size:10px;
+.public-game-selector-icon,
+.customer-game-selector-icon{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:34px;
+  height:34px;
+  flex:0 0 34px;
+  border-radius:9px;
+  background:#0a0f16;
+  border:1px solid rgba(255,200,30,.35);
+  color:#ffd43d;
+  font-size:21px;
+}
+
+.public-game-selector strong,
+.customer-game-selector strong{
+  display:block;
+  color:#f4c83e;
+  font-size:15px;
+  line-height:1.2;
   font-weight:900;
-  letter-spacing:.12em;
 }
 
-.public-selected-game h2{
-  margin:4px 0 0;
-  color:#ffd34d;
-  font-size:23px;
+.public-game-selector > span:not(.public-game-selector-status),
+.customer-game-selector > span:not(.customer-game-selector-status){
+  display:block;
+  margin-top:6px;
+  color:#c5cad1;
+  font-size:10px;
 }
 
-.public-selected-date{
-  margin-top:4px;
-  color:#8f97a6;
-  font-size:11px;
+.public-game-selector small,
+.customer-game-selector small{
+  display:block;
+  margin-top:8px;
+  color:#8f98a4;
+  font-size:10px;
+  line-height:1.35;
+}
+
+.public-game-selector-status,
+.customer-game-selector-status{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:25px;
+  padding:0 7px;
+  border-radius:7px;
+  border:1px solid #303944;
+  background:#090e14;
+  font-size:8px;
+  font-weight:900;
+  letter-spacing:.2px;
+  text-align:center;
+}
+
+.public-game-selector-status.open,
+.customer-game-selector-status.open{
+  color:#27ed82;
+  border-color:rgba(39,237,130,.45);
+}
+
+.public-game-selector-status.locked,
+.customer-game-selector-status.locked{
+  color:#ffd43d;
+  border-color:rgba(255,212,61,.4);
+}
+
+.public-game-selector-status.off,
+.customer-game-selector-status.off{
+  color:#ff6b6b;
+  border-color:rgba(255,91,91,.4);
+}
+
+.public-selected-game-card,
+.customer-selected-game-card{
+  margin-bottom:14px;
+  padding:13px;
+  border-radius:13px;
+  border:1px solid rgba(255,194,18,.46);
+  background:linear-gradient(145deg,rgba(17,23,30,.98),rgba(5,9,14,.98));
+  box-shadow:0 7px 24px rgba(0,0,0,.25),inset 0 0 22px rgba(255,193,7,.025);
+}
+
+.public-selected-game-head,
+.customer-selected-game-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:12px;
+}
+
+.public-selected-game-head h2,
+.customer-selected-game-head h2{
+  margin:0;
+  color:#f4c83e;
+  font-size:20px;
+  font-weight:900;
+}
+
+.public-selected-game-head p,
+.customer-selected-game-head p{
+  margin:5px 0 0;
+  color:#aeb5bf;
+  font-size:10px;
+}
+
+.public-selected-game-head .today-title{
+  justify-content:flex-start;
+  margin:0 0 6px;
+  font-size:9px;
+  letter-spacing:1px;
+}
+
+.public-selected-game-head .today-title::before,
+.public-selected-game-head .today-title::after{
+  display:none;
+}
+
+.public-back-games{
+  min-height:36px;
+  padding:0 10px;
+  border-radius:8px;
+  border:1px solid #34404d;
+  background:#0b1118;
+  color:#f4c83e;
+  font-size:9px;
+  font-weight:900;
+}
+
+.public-session-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:8px;
 }
 
 .public-session-card{
-  padding:14px;
-  border:1px solid rgba(255,255,255,.08);
-  border-radius:13px;
-  background:rgba(255,255,255,.025);
+  min-height:112px;
+  padding:11px;
+  border-radius:10px;
+  border:1px solid #28323d;
+  background:linear-gradient(145deg,#0c1219,#05090e);
 }
 
 .public-session-top{
   display:flex;
-  align-items:flex-start;
+  align-items:center;
   justify-content:space-between;
-  gap:12px;
+  gap:8px;
 }
 
 .public-session-top strong{
-  display:block;
-  color:#fff;
-  font-size:15px;
+  color:#f3f3f3;
+  font-size:14px;
 }
 
 .public-session-top span{
-  display:block;
-  margin-top:4px;
-  color:#8f97a6;
-  font-size:11px;
+  color:#aeb5bf;
+  font-size:10px;
 }
 
 .public-session-status{
-  flex:0 0 auto;
-  padding:7px 9px;
-  border-radius:8px;
+  margin-top:10px;
+  min-height:30px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  border-radius:7px;
   font-size:10px;
   font-weight:900;
 }
 
 .public-session-status.open{
-  color:#4be38d;
-  background:rgba(40,190,100,.10);
+  color:#27ed82;
+  background:rgba(39,237,130,.07);
 }
 
 .public-session-status.locked{
-  color:#ff626b;
-  background:rgba(255,70,80,.08);
+  color:#ffd43d;
+  background:rgba(255,212,61,.06);
 }
 
 .public-session-status.off{
-  color:#8e96a5;
-  background:rgba(255,255,255,.035);
+  color:#ff7070;
+  background:rgba(255,91,91,.06);
 }
 
-.public-session-result{
-  margin-top:12px;
-  color:#858d9b;
+.customer-header-balances{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  margin-left:auto;
+}
+
+.customer-header-balances > div{
+  min-width:76px;
+  padding:5px 7px;
+  border-radius:7px;
+  background:#0a0f15;
+  border:1px solid #25303b;
+  text-align:right;
+}
+
+.customer-header-balances span{
+  display:block;
+  color:#8d96a1;
+  font-size:7px;
+  font-weight:900;
+  letter-spacing:.4px;
+}
+
+.customer-header-balances strong{
+  display:block;
+  margin-top:2px;
+  color:#27ed82;
   font-size:10px;
-  font-weight:800;
-  letter-spacing:.08em;
+  font-weight:900;
 }
 
-.public-session-result strong{
-  margin-left:7px;
-  color:#ffd34d;
-  font-size:13px;
-  letter-spacing:0;
+.customer-header-balances > div:last-child strong{
+  color:#ff6464;
 }
 
-.public-session-card .play-btn{
-  margin-top:12px;
-}
-
-@media (max-width:820px){
-  .customer-game-select-grid,
-  .public-game-select-grid{
+@media (max-width:760px){
+  .public-game-selector-grid,
+  .customer-game-selector-grid{
     grid-template-columns:1fr;
   }
 
-  .customer-header-actions{
-    flex-wrap:wrap;
-    justify-content:flex-end;
+  .public-game-selector,
+  .customer-game-selector{
+    min-height:112px;
   }
 
-  .customer-header-balance{
-    min-width:72px;
-  }
-}
-
-@media (max-width:560px){
-  .customer-header-inner{
-    align-items:flex-start;
-  }
-
-  .customer-header-actions{
-    width:100%;
-    margin-top:10px;
-    justify-content:flex-start;
-  }
-
-  .customer-header-balance{
-    flex:1 1 80px;
-    text-align:left;
+  .public-session-grid{
+    grid-template-columns:1fr;
   }
 
   .public-selected-game-head,
-  .public-session-top{
-    flex-direction:column;
+  .customer-selected-game-head{
+    align-items:flex-start;
   }
 
-  .public-close-game-btn{
-    align-self:flex-start;
+  .customer-header-balances{
+    order:2;
+    width:100%;
+    margin-left:0;
+  }
+
+  .customer-header-balances > div{
+    flex:1;
+    text-align:center;
   }
 }
 
 
-`}</style>
+`}
+</style>
 
 
 
@@ -15284,219 +15226,21 @@ TODAY'S GAMES
 
 
 {/* =================================================
-
-
 PUBLIC GAME PREVIEW
-
-
 ================================================= */}
-
-
-
 
 <main className="games">
-  <section className="public-game-select-grid">
-    {(["Main Bazar", "Kolkata Fatafat", "Dus ka Dum"] as const).map((game) => {
-      const summary = getGameSummary(game);
-
-      const subtitle =
-        game === "Main Bazar"
-          ? "Open / Close"
-          : game === "Kolkata Fatafat"
-            ? "Bazi 1–8"
-            : "Bazi 1–10";
-
-      return (
-        <button
-          type="button"
-          className={`public-game-select-card ${publicSelectedGame === game ? "selected" : ""}`}
-          onClick={() => setPublicSelectedGame(game)}
-        >
-          <div className="public-game-select-top">
-            <div>
-              <h2>{game}</h2>
-              <div className="public-game-select-sub">{subtitle}</div>
-            </div>
-            <span className="public-game-select-arrow">›</span>
-          </div>
-
-          <div className="public-game-select-date">{formatGameDate()}</div>
-
-          <div className={`public-game-overall-status ${
-            !todaySessionsReady
-              ? "loading"
-              : summary.running
-                ? "open"
-                : summary.available
-                  ? "locked"
-                  : "off"
-          }`}>
-            {!todaySessionsReady ? (
-              "LOADING..."
-            ) : summary.running ? (
-              <>
-                <span className="green-dot" />
-                OPEN FOR BETTING
-              </>
-            ) : summary.available ? (
-              "LOCKED"
-            ) : (
-              "GAME OFF"
-            )}
-          </div>
-
-          <div className="public-game-select-hint">
-            {summary.available ? "VIEW TODAY'S SESSIONS" : "NO SCHEDULED SESSIONS TODAY"}
-          </div>
-        </button>
-      );
-    })}
-  </section>
-
-  {publicSelectedGame ? (
-    <section className="public-selected-game">
-      <div className="public-selected-game-head">
-        <div>
-          <div className="public-selected-kicker">TODAY'S SESSIONS</div>
-          <h2>{publicSelectedGame}</h2>
-          <div className="public-selected-date">{formatGameDate()}</div>
-        </div>
-        <button
-          type="button"
-          className="public-close-game-btn"
-          onClick={() => setPublicSelectedGame(null)}
-        >
-          CLOSE
-        </button>
-      </div>
-
-      {!todaySessionsReady ? (
-        <div className="public-session-empty">LOADING TODAY'S SESSIONS...</div>
-      ) : (
-        <div className="public-session-list">
-          {todayPlayableSessions.filter((session) => session.game === publicSelectedGame).length === 0 ? (
-            <div className="public-session-empty">GAME OFF — NO SCHEDULED SESSIONS TODAY.</div>
-          ) : publicSelectedGame === "Main Bazar" ? (
-            mainBazarMarkets
-              .filter((market) =>
-                todayPlayableSessions.some(
-                  (session) =>
-                    session.game === "Main Bazar" &&
-                    session.market.toUpperCase() === market.market.toUpperCase()
-                )
-              )
-              .map((market) => {
-                const available = isGameAvailableToday("Main Bazar", null, market.market);
-                const running = getSessionStatus("Main Bazar", null, market.market) === "RUNNING";
-
-                return (
-                  <div className="public-session-card" key={market.market}>
-                    <div className="public-session-top">
-                      <div>
-                        <strong>{market.market}</strong>
-                        <span>Deadline: {market.time}</span>
-                      </div>
-                      <div className={`public-session-status ${running ? "open" : available ? "locked" : "off"}`}>
-                        {running ? (
-                          <>
-                            <span className="green-dot" />
-                            OPEN FOR BETTING
-                          </>
-                        ) : available ? (
-                          "LOCKED"
-                        ) : (
-                          "GAME OFF"
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="public-session-result">
-                      RESULT <strong>{formatTodayResult(getTodayGameResult("Main Bazar", null, market.market))}</strong>
-                    </div>
-
-                    {running && (
-                      <button type="button" className="play-btn" onClick={openLogin}>
-                        LOGIN TO PLAY
-                      </button>
-                    )}
-                  </div>
-                );
-              })
-          ) : (
-            (publicSelectedGame === "Kolkata Fatafat" ? kolkataBazi : dusBazi)
-              .filter((bazi) =>
-                todayPlayableSessions.some(
-                  (session) =>
-                    session.game === publicSelectedGame &&
-                    session.bazi_no === bazi.no
-                )
-              )
-              .map((bazi) => {
-                const available = isGameAvailableToday(publicSelectedGame as "Main Bazar" | "Kolkata Fatafat" | "Dus ka Dum", bazi.no);
-                const running = getSessionStatus(publicSelectedGame as "Main Bazar" | "Kolkata Fatafat" | "Dus ka Dum", bazi.no) === "RUNNING";
-
-                return (
-                  <div className="public-session-card" key={bazi.no}>
-                    <div className="public-session-top">
-                      <div>
-                        <strong>Bazi {bazi.no}</strong>
-                        <span>{bazi.time}</span>
-                      </div>
-                      <div className={`public-session-status ${running ? "open" : available ? "locked" : "off"}`}>
-                        {running ? (
-                          <>
-                            <span className="green-dot" />
-                            OPEN FOR BETTING
-                          </>
-                        ) : available ? (
-                          "LOCKED"
-                        ) : (
-                          "GAME OFF"
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="public-session-result">
-                      RESULT <strong>{formatTodayResult(getTodayGameResult(publicSelectedGame, bazi.no))}</strong>
-                    </div>
-
-                    {running && (
-                      <button type="button" className="play-btn" onClick={openLogin}>
-                        LOGIN TO PLAY
-                      </button>
-                    )}
-                  </div>
-                );
-              })
-          )}
-        </div>
-      )}
-    </section>
-  ) : null}
+  {renderPublicGameCards()}
+  {renderPublicSelectedGame()}
 </main>
 
-
 {/* =================================================
-
-
 PUBLIC FOOTER
-
-
 ================================================= */}
 
-
-
-
 <footer className="footer">
-
-
-<div className="footer-responsible">♜ &nbsp; Play Responsibly &nbsp; | &nbsp; 18+ Only &nbsp; | &nbsp; Virtual USD Coin Games</div>
-
-
+  <div className="footer-responsible">♜ &nbsp; Play Responsibly &nbsp; | &nbsp; 18+ Only &nbsp; | &nbsp; Virtual USD Coin Games</div>
 </footer>
-
-
-
 
 {/* =================================================
 
