@@ -3459,14 +3459,6 @@ const renderPublicSelectedGame = () => {
   const configuredDus = dayNumber === 0 ? dusBazi.slice(0, 5) : dusBazi;
   return (
     <section className="public-selected-game-card">
-      <div className="public-selected-game-head">
-        <div>
-          <div className="today-title">SELECTED GAME</div>
-          <h2>{game}</h2>
-          <p>{getGameScheduleLabel(game)} • {new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</p>
-        </div>
-        <button type="button" className="public-back-games" onClick={() => setPublicSelectedGame(null)}>BACK TO GAMES</button>
-      </div>
       {game === "Main Bazar" ? (
         <div className="public-session-grid">{mainBazarMarkets.map((market) => renderPublicMainMarket(market.market, market.time))}</div>
       ) : game === "Kolkata Fatafat" ? (
@@ -4235,14 +4227,6 @@ const renderCustomerSelectedGame = () => {
 
   return (
     <section className="customer-selected-game-card">
-      <div className="customer-selected-game-head">
-        <div>
-          <div className="customer-section-kicker">SELECTED GAME</div>
-          <h2>{game}</h2>
-          <p>{getGameScheduleLabel(game)} • {new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</p>
-        </div>
-        <button type="button" className="admin-small-action" onClick={() => setCustomerSelectedGame(null)}>BACK TO GAMES</button>
-      </div>
       {game === "Main Bazar" ? (
         <div className="customer-main-grid">{mainBazarMarkets.map((market) => renderMainMarket(market.market, market.time))}</div>
       ) : game === "Kolkata Fatafat" ? (
@@ -15130,11 +15114,11 @@ color: #111;
     gap:3px;
   }
   .customer-header-balances > div{
-    min-width:58px;
-    padding:4px;
+    min-width:60px;
+    padding:5px 5px;
   }
   .customer-header-balances strong{
-    font-size:8px;
+    font-size:9.5px;
   }
 }
 
@@ -15149,7 +15133,10 @@ color: #111;
     font-size:5px;
   }
   .customer-header-balances > div{
-    min-width:53px;
+    min-width:56px;
+  }
+  .customer-header-balances strong{
+    font-size:9px;
   }
   .customer-header .customer-refresh-btn,
   .customer-header .profile-mini-btn{
