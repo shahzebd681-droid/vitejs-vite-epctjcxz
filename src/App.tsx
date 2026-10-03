@@ -1258,13 +1258,13 @@ const allocateVirtualUsdToAgent = async () => {
 
 
 const getCurrentSuperAdminMainSupply = async () => {
-  const { data, error } = await supabase.rpc("get_super_admin_virtual_usd_supply");
+  const { data, error } = await supabase.rpc("get_super_admin_main_supply");
 
   if (error) throw error;
 
   const supply = Array.isArray(data) ? data[0] : data;
 
-  return Number(supply?.available_supply || 0);
+  return Number(supply?.super_admin_available || 0);
 };
 
 const withdrawVirtualUsdFromAgent = async () => {
@@ -6769,18 +6769,7 @@ const transferSuperAdminOnlineCustomer = async (direction: "SUPER_ADMIN_TO_CUSTO
       throw new Error("Transfer completed but no result was returned.");
     }
 
-    const { data: mainSupplyData, error: mainSupplyError } =
-      await supabase.rpc("get_super_admin_main_supply");
-
-    if (mainSupplyError) throw mainSupplyError;
-
-    const mainSupply = Array.isArray(mainSupplyData)
-      ? mainSupplyData[0]
-      : mainSupplyData;
-
-    const currentMainSupply = Number(
-      mainSupply?.super_admin_available || 0
-    );
+    const currentMainSupply = await getCurrentSuperAdminMainSupply();
 
     setOnlineCoinAmount("");
     const successMessage =
