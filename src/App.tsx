@@ -4743,6 +4743,11 @@ $
 <div className="context-game-row">
 
 
+<span className={`context-game-icon ${selectedGame === "Main Bazar" ? "main" : selectedGame === "Kolkata Fatafat" ? "kolkata" : "dus"}`} aria-hidden="true">
+  {selectedGame === "Main Bazar" ? "♛" : selectedGame === "Kolkata Fatafat" ? "♜" : "🎲"}
+</span>
+
+
 <div className="context-value">
 
 
@@ -5421,6 +5426,7 @@ wallet when submitted.
 
 
 <button
+className="selected-bottom"
 
 
 onClick={() =>
@@ -15225,6 +15231,138 @@ color: #111;
     min-width:31px;
     height:31px;
   }
+}
+
+
+/* ================= BETTING REFERENCE VISUAL PATCH ================= */
+
+.context-game-row{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.context-game-icon{
+  width:34px;
+  height:34px;
+  flex:0 0 34px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:9px;
+  border:1px solid rgba(255,200,30,.42);
+  background:linear-gradient(145deg,#121820,#070b10);
+  color:#ffd43d;
+  font-size:21px;
+  line-height:1;
+  text-shadow:0 0 10px rgba(255,193,7,.24);
+}
+.context-game-row .context-value{
+  flex:1 1 auto;
+  min-width:0;
+}
+
+/* Gold, readable betting numbers */
+.number-btn:not(.selected) span{
+  color:#f0cf58;
+  font-size:10px;
+  font-weight:900;
+  letter-spacing:.2px;
+  text-shadow:0 1px 3px rgba(255,193,7,.16);
+}
+.bet-type-reference-number{
+  color:#f2cf55;
+  text-shadow:0 1px 3px rgba(255,193,7,.16);
+}
+.bet-type-btn.selected .bet-type-reference-number{
+  color:#17120a;
+  text-shadow:none;
+}
+
+/* Premium 3D gold betting coins */
+.amount-btn{
+  width:58px;
+  height:58px;
+  min-height:58px;
+  border:3px solid #d99b16;
+  border-radius:50%;
+  background:
+    radial-gradient(circle at 34% 28%,#fff4a8 0%,#f6c52f 18%,#9c6510 47%,#3b2507 66%,#090b10 72%),
+    #0b0e14;
+  color:#ffe06a;
+  font-size:10px;
+  font-weight:900;
+  text-shadow:0 1px 2px #2a1a02;
+  box-shadow:
+    inset 0 0 0 2px rgba(255,235,125,.62),
+    inset 0 -4px 5px rgba(0,0,0,.55),
+    0 3px 0 #6f4508,
+    0 7px 14px rgba(0,0,0,.42);
+}
+.amount-btn.selected{
+  color:#fff9cf;
+  border-color:#ffe36a;
+  background:
+    radial-gradient(circle at 34% 27%,#fffbe0 0%,#ffe85a 20%,#ffbf16 48%,#a96b09 72%,#3b2304 100%);
+  box-shadow:
+    inset 0 0 0 2px rgba(255,250,190,.92),
+    inset 0 -4px 5px rgba(92,51,0,.42),
+    0 0 0 2px rgba(255,198,35,.24),
+    0 0 20px rgba(255,190,20,.48),
+    0 7px 15px rgba(0,0,0,.45);
+}
+
+/* Reference-style bottom navigation */
+.customer-bottom-nav{
+  margin-top:14px;
+  padding:5px;
+  gap:5px;
+  border:1px solid rgba(255,193,7,.24);
+  border-radius:11px;
+  background:linear-gradient(180deg,#070b11,#05080d);
+  box-shadow:0 -4px 18px rgba(0,0,0,.24),inset 0 0 18px rgba(255,193,7,.025);
+}
+.customer-bottom-nav button{
+  height:58px;
+  min-width:0;
+  border-radius:9px;
+  border:1px solid #202a35;
+  background:linear-gradient(145deg,#0b1118,#070b10);
+  color:#d8dce1;
+  font-size:9px;
+  font-weight:800;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:4px;
+}
+.customer-bottom-nav button::before{
+  display:block;
+  font-size:17px;
+  line-height:1;
+  color:#e7ebf0;
+}
+.customer-bottom-nav button:nth-child(1)::before{content:"⌂";}
+.customer-bottom-nav button:nth-child(2)::before{content:"◷";}
+.customer-bottom-nav button:nth-child(3)::before{
+  content:"";
+  width:18px;
+  height:18px;
+  background:
+    radial-gradient(circle at 50% 28%,currentColor 0 4px,transparent 4.5px),
+    radial-gradient(ellipse at 50% 88%,currentColor 0 8px,transparent 8.5px);
+}
+.customer-bottom-nav .selected-bottom{
+  color:#17120a;
+  border-color:#ffc52a;
+  background:linear-gradient(145deg,#ffe76b,#ffbd19);
+  box-shadow:0 0 14px rgba(255,193,7,.18),inset 0 0 12px rgba(255,255,255,.18);
+}
+.customer-bottom-nav .selected-bottom::before{color:#17120a;}
+
+@media (max-width:390px){
+  .amount-btn{width:54px;height:54px;min-height:54px;}
+  .customer-bottom-nav button{height:56px;}
 }
 
 `}
