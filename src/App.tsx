@@ -99,7 +99,7 @@ const mainBazarMarkets = [
 
 
 
-const amountOptions = [5, 10, 50, 100, 200, 500, 1000, 5000];
+const amountOptions = [5, 10, 20, 50, 100, 200, 500, 1000];
 
 const betRates: Record<string, number> = {
 
@@ -3086,6 +3086,14 @@ setSelectedBets({});
 
 };
 
+const removeSelectedBet = (number: string) => {
+  setSelectedBets((previous) => {
+    const next = { ...previous };
+    delete next[number];
+    return next;
+  });
+};
+
 const placeVirtualBet = async () => {
 if (betSubmitting) {
 return;
@@ -4510,7 +4518,7 @@ SELECTED{" "}
  >
 
 
-      <span>
+      <span className="selected-bet-number">
 
 
       {number}
@@ -4528,6 +4536,15 @@ SELECTED{" "}
 
 
       </strong>
+
+      <button
+        type="button"
+        className="selected-bet-remove"
+        aria-label={`Remove ${number}`}
+        onClick={() => removeSelectedBet(number)}
+      >
+        ×
+      </button>
 
 
  </div>
@@ -4646,11 +4663,6 @@ return (
 <main className="customer-main">
 
 
-{renderBalanceBar()}
-
-
-
-
 <div className="betting-topbar">
 
 
@@ -4728,20 +4740,29 @@ $
 <div className="betting-context">
 
 
-<div className="context-label">
-
-
-SELECTED GAME
-
-</div>
-
-
+<div className="context-game-row">
 
 
 <div className="context-value">
 
 
 {getBetTitle()}
+
+
+</div>
+
+
+<div className="context-date">
+
+
+{new Date(`${todayDateKey}T00:00:00`).toLocaleDateString("en-IN", {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+})}
+
+
+</div>
 
 
 </div>
@@ -4922,12 +4943,12 @@ return (
   >
 
 
-  <span className="bet-type-icon">
-  {type === "Single" && "●"}
-  {type === "Single Patti" && "●●●"}
-  {type === "Double Patti" && "●●"}
-  {type === "Triple Patti" && "●●●"}
-  {type === "Jodi" && "◉◉"}
+  <span className="bet-type-reference-number">
+  {type === "Single" && "7"}
+  {type === "Single Patti" && "123"}
+  {type === "Double Patti" && "112"}
+  {type === "Triple Patti" && "777"}
+  {type === "Jodi" && "77"}
   </span>
   <span className="bet-type-label">{type}</span>
 
@@ -10918,6 +10939,24 @@ font-weight: 900;
 
 
 
+.context-game-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.context-game-row .context-value {
+  margin-top: 0;
+}
+
+.context-date {
+  color: #a9afb6;
+  font-size: 8px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 .betting-live-status {
 
 
@@ -11070,11 +11109,12 @@ gap: 6px;
 
 }
 
-.bet-type-icon {
+.bet-type-reference-number {
 font-size: 15px;
 font-weight: 900;
-letter-spacing: 1px;
+letter-spacing: .4px;
 line-height: 1;
+color: #f2f2f2;
 flex: 0 0 auto;
 }
 
@@ -11233,10 +11273,10 @@ grid-template-columns:
 gap: 6px;
 
 
-max-height: 300px;
+max-height: none;
 
 
-overflow-y: auto;
+overflow-y: visible;
 
 
 }
@@ -11370,13 +11410,13 @@ flex-direction: column;
 gap: 10px;
 
 
-max-height: 520px;
+max-height: none;
 
 
-overflow-y: auto;
+overflow-y: visible;
 
 
-padding-right: 2px;
+padding-right: 0;
 
 }
 
@@ -11471,7 +11511,10 @@ grid-template-columns:
     repeat(4,minmax(0,1fr));
 
 
-gap: 6px;
+gap: 9px;
+
+
+padding: 3px 2px;
 
 
 }
@@ -11481,28 +11524,36 @@ gap: 6px;
 
 .amount-btn {
 
-min-height: 35px;
+width: 54px;
+height: 54px;
+min-height: 54px;
+justify-self: center;
 
 
-border-radius: 7px;
+border-radius: 50%;
 
 
 border: 1px solid #252e38;
 
 
-background: #0a0f15;
+background:
+    radial-gradient(circle at 35% 30%, #1b222b, #080c12 70%);
 
 
-color: #bfc3c7;
+color: #e1e4e7;
 
 
-font-size: 8px;
+font-size: 10px;
 
 
-font-weight: 800;
+font-weight: 900;
 
 
 cursor: pointer;
+
+box-shadow:
+    inset 0 0 0 2px rgba(255,195,0,.04),
+    0 4px 10px rgba(0,0,0,.25);
 
 
 }
@@ -11520,23 +11571,16 @@ border-color: #ffc52b;
 
 
 background:
+    radial-gradient(circle at 35% 30%, #fff19a, #ffc21d 72%);
 
 
-    linear-gradient(
-
-
-    135deg,
-
-
-    #ffe36a,
-
-
-    #ffbd19
-
-    );
+box-shadow:
+    0 0 0 2px rgba(255,197,43,.18),
+    0 6px 14px rgba(255,183,0,.18);
 
 
 }
+
 
 
 
@@ -11630,10 +11674,10 @@ gap: 5px;
 margin-top: 8px;
 
 
-max-height: 180px;
+max-height: none;
 
 
-overflow-y: auto;
+overflow-y: visible;
 
 }
 
@@ -11684,6 +11728,30 @@ font-weight: 900;
 color: #ffd13b;
 
 
+}
+
+.selected-bet-number {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.selected-bet-remove {
+  width: 23px;
+  height: 23px;
+  margin-left: 8px;
+  flex: 0 0 23px;
+  border: 1px solid rgba(255,70,70,.45);
+  border-radius: 6px;
+  background: rgba(255,55,55,.12);
+  color: #ff5b5b;
+  font-size: 17px;
+  line-height: 19px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.selected-bet-remove:active {
+  transform: scale(.96);
 }
 
 .selected-bets-total {
@@ -14111,6 +14179,19 @@ color: #111;
   .bazi-box,.customer-bazi-box{min-height:86px;padding:9px;}
   .customer-header-actions{gap:4px;}
   .profile-mini-btn{width:34px;min-width:34px;padding:0;font-size:16px;}
+}
+
+@media (max-width:390px){
+  .amount-grid {
+    gap: 7px;
+  }
+
+  .amount-btn {
+    width: 50px;
+    height: 50px;
+    min-height: 50px;
+    font-size: 9px;
+  }
 }
 
 @media (max-width:390px){
