@@ -6769,7 +6769,18 @@ const transferSuperAdminOnlineCustomer = async (direction: "SUPER_ADMIN_TO_CUSTO
       throw new Error("Transfer completed but no result was returned.");
     }
 
-    const currentMainSupply = await getCurrentSuperAdminMainSupply();
+    const { data: mainSupplyData, error: mainSupplyError } =
+      await supabase.rpc("get_super_admin_main_supply");
+
+    if (mainSupplyError) throw mainSupplyError;
+
+    const mainSupply = Array.isArray(mainSupplyData)
+      ? mainSupplyData[0]
+      : mainSupplyData;
+
+    const currentMainSupply = Number(
+      mainSupply?.super_admin_available || 0
+    );
 
     setOnlineCoinAmount("");
     const successMessage =
