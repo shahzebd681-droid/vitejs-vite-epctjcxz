@@ -1313,12 +1313,10 @@ const withdrawVirtualUsdFromAgent = async () => {
       throw new Error("Withdrawal completed but no result was returned.");
     }
 
-    const currentMainSupply = await getCurrentSuperAdminMainSupply();
-
     setAllocationAmount("");
     setAllocationNote("");
     setAdminSuccess(
-      `Virtual USD withdrawn successfully. $${amount.toFixed(2)} returned from ${selectedAgent.username || selectedAgent.agent_code} to Super Admin supply. Agent balance: $${Number(result.agent_balance || 0).toFixed(2)}. Super Admin Available Supply: $${currentMainSupply.toFixed(2)}.`
+      `Virtual USD withdrawn successfully. $${amount.toFixed(2)} returned from ${selectedAgent.username || selectedAgent.agent_code} to Super Admin supply. Agent balance: $${Number(result.agent_balance || 0).toFixed(2)}. Super Admin Available Supply: $${Number(result.super_admin_available_supply || 0).toFixed(2)}.`
     );
 
     await loadSuperAdminDashboard();
