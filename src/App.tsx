@@ -4261,6 +4261,7 @@ const renderCustomerHome = () => (
       <div className="customer-section-title">TODAY'S GAMES</div>
       {renderCustomerGameCards()}
       <div className="customer-notice">
+        <div className="customer-notice-responsible">♜ &nbsp; Play Responsibly &nbsp; | &nbsp; 18+ Only &nbsp; | &nbsp; Virtual USD Coin Games</div>
         Virtual USD coin game only.<br />
         No customer Deposit or Withdrawal option is available in this customer interface.
       </div>
@@ -15365,6 +15366,69 @@ color: #111;
   .customer-bottom-nav button{height:56px;}
 }
 
+
+/* =========================================================
+   CONFIRMED CUSTOMER FIXED HEADER / BOTTOM NAV + FINAL BETTING UI
+   Minimal visual-only patch. Existing logic and markup preserved.
+   ========================================================= */
+.customer-header{
+  position:fixed !important;
+  top:0 !important;
+  left:0 !important;
+  right:0 !important;
+  z-index:1000 !important;
+}
+.customer-main{
+  padding-top:118px !important;
+  padding-bottom:86px !important;
+}
+.customer-bottom-nav{
+  position:fixed !important;
+  left:50% !important;
+  right:auto !important;
+  bottom:8px !important;
+  transform:translateX(-50%) !important;
+  width:min(calc(100% - 20px), 520px) !important;
+  margin:0 !important;
+  z-index:1001 !important;
+}
+.customer-footer{
+  display:none !important;
+}
+.customer-notice{
+  font-size:0 !important;
+  margin:12px 2px 0 !important;
+  padding:0 !important;
+  background:transparent !important;
+  border:none !important;
+}
+.customer-notice-responsible{
+  display:block;
+  color:#d7d7d7;
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:.2px;
+  line-height:1.4;
+  text-align:center;
+}
+.customer-notice-responsible:first-letter{
+  color:#ffd43d;
+}
+.virtual-note{
+  display:none !important;
+}
+.amount-btn,
+.amount-btn.selected{
+  color:#111 !important;
+}
+.number-btn span{
+  font-size:11px !important;
+}
+@media (max-width:390px){
+  .number-btn span{
+    font-size:11px !important;
+  }
+}
 `}
 </style>
 
