@@ -988,7 +988,7 @@ const [betAnalyzerRows, setBetAnalyzerRows] = useState<any[]>([]);
 const [betAnalyzerLoading, setBetAnalyzerLoading] = useState(false);
 const [betAnalyzerGameId, setBetAnalyzerGameId] = useState("");
 const [betAnalyzerBaziValue, setBetAnalyzerBaziValue] = useState("");
-const [betAnalyzerDate, setBetAnalyzerDate] = useState(getLocalDateString());
+const [betAnalyzerDate, setBetAnalyzerDate] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; });
 const [betAnalyzerOpenPanel, setBetAnalyzerOpenPanel] = useState<"SINGLE" | "PATTI" | "JODI">("SINGLE");
 const [betAnalyzerHadLiveData, setBetAnalyzerHadLiveData] = useState(false);
 
@@ -2216,10 +2216,9 @@ const getSessionStatus = (
   }
 
   const nowMs = Date.now();
-  const openingMs = new Date(session.opening_time).getTime();
   const deadlineMs = new Date(session.deadline_at).getTime();
 
-  return nowMs >= openingMs && nowMs < deadlineMs
+  return isBetAnalyzerSessionStarted(session) && nowMs < deadlineMs
     ? "RUNNING"
     : "LOCKED";
 };
