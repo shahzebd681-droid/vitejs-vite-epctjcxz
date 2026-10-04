@@ -7003,20 +7003,46 @@ const resetBetAnalyzerSelection = () => {
   setBetAnalyzerRows([]);
 };
 
-const loadBetAnalyzerSessions = async () => {
-  setBetAnalyzerLoading(true);
+const getBetAnalyzerBettingStatus = (session: any) => {
+  if (!session?.opening_time || !session?.deadline_at) return "LOCKED";
+
+  const nowMs = Date.now();
+  const openingMs = new Date(session.opening_time).getTime();
+  const deadlineMs = new Date(session.deadline_at).getTime();
+
+  return nowMs >= openingMs && nowMs < deadlineMs
+    ? "RUNNING"
+    : "LOCKED";
+};
+
+const isBetAnalyzerSessionStarted = (session: any) => {
+  if (!session?.opening_time) return false;
+
+  const openingMs = new Date(session.opening_time).getTime();
+  return Number.isFinite(openingMs) && Date.now() >= openingMs;
+};
+
+const loadBetAnalyzerSessions = async (
+  mode?: "SINGLE" | "PATTI",
+  silent = false
+) => {
+  if (!silent) setBetAnalyzerLoading(true);
   setAdminError("");
   setAdminSuccess("");
 
   try {
-    // Only CLOSED sessions are analyzed.
-    // RESULT_DECLARED / SETTLEMENT / SETTLED sessions are intentionally excluded.
+    const betTypeFilter =
+      mode === "SINGLE"
+        ? ["Single"]
+        : mode === "PATTI"
+          ? ["Single Patti", "Double Patti", "Triple Patti"]
+          : ["Single", "Single Patti", "Double Patti", "Triple Patti"];
+
     const { data: sessionRows, error: sessionError } = await supabase
       .from("game_sessions")
       .select("id, session_code, game_id, session_date, bazi_no, market, status, opening_time, deadline_at, scheduled_playable")
+      .eq("session_date", getLocalDateString())
       .eq("scheduled_playable", true)
-      .eq("status", "CLOSED")
-      .order("session_date", { ascending: false })
       .order("opening_time", { ascending: false });
 
     if (sessionError) throw sessionError;
@@ -7030,9 +7056,10 @@ const loadBetAnalyzerSessions = async () => {
     const sessionIds = rows.map((row: any) => String(row.id));
     const { data: activeItems, error: itemsError } = await supabase
       .from("bet_items")
-      .select("session_id")
+      .select("session_id, bet_type")
       .in("session_id", sessionIds)
-      .eq("status", "ACTIVE");
+      .eq("status", "ACTIVE")
+      .in("bet_type", betTypeFilter);
 
     if (itemsError) throw itemsError;
 
@@ -7059,7 +7086,11 @@ const loadBetAnalyzerSessions = async () => {
     }
 
     const normalized = rows
-      .filter((row: any) => sessionsWithActiveBets.has(String(row.id)))
+      .filter(
+        (row: any) =>
+          sessionsWithActiveBets.has(String(row.id)) &&
+          isBetAnalyzerSessionStarted(row)
+      )
       .map((row: any) => ({
         id: String(row.id),
         session_code: String(row.session_code || ""),
@@ -7071,6 +7102,7 @@ const loadBetAnalyzerSessions = async () => {
         status: String(row.status || ""),
         opening_time: String(row.opening_time || ""),
         deadline_at: String(row.deadline_at || ""),
+        betting_status: getBetAnalyzerBettingStatus(row),
       }));
 
     setBetAnalyzerSessions(normalized);
@@ -7090,7 +7122,7 @@ const loadBetAnalyzerSessions = async () => {
     console.error("=== BET ANALYZER SESSION LOAD ERROR ===", error);
     setAdminError(error?.message || String(error));
   } finally {
-    setBetAnalyzerLoading(false);
+    if (!silent) setBetAnalyzerLoading(false);
   }
 };
 
@@ -7165,8 +7197,8 @@ const getJodiNextSession = (
   );
 };
 
-const loadJodiAnalyzerSessions = async () => {
-  setBetAnalyzerLoading(true);
+const loadJodiAnalyzerSessions = async (silent = false) => {
+  if (!silent) setBetAnalyzerLoading(true);
   setAdminError("");
   setAdminSuccess("");
 
@@ -7176,8 +7208,8 @@ const loadJodiAnalyzerSessions = async () => {
       .select(
         "id, session_code, game_id, session_date, bazi_no, market, status, opening_time, deadline_at, scheduled_playable"
       )
+      .eq("session_date", getLocalDateString())
       .eq("scheduled_playable", true)
-      .order("session_date", { ascending: false })
       .order("opening_time", { ascending: false });
 
     if (sessionError) throw sessionError;
@@ -7243,7 +7275,10 @@ const loadJodiAnalyzerSessions = async () => {
     }
 
     const normalized = allSessions
-      .filter((session: any) => session.status === "CLOSED")
+      .filter(
+        (session: any) =>
+          isBetAnalyzerSessionStarted(session)
+      )
       .map((session: any) => {
         const previousSession = getJodiPreviousSession(session, allSessions);
         const currentItems = jodiItemsBySession.get(session.id) || [];
@@ -7271,6 +7306,7 @@ const loadJodiAnalyzerSessions = async () => {
           ...session,
           jodi_previous_session: previousSession,
           jodi_next_session: getJodiNextSession(session, allSessions),
+          betting_status: getBetAnalyzerBettingStatus(session),
         };
       })
       .filter(Boolean);
@@ -7292,7 +7328,7 @@ const loadJodiAnalyzerSessions = async () => {
     console.error("=== JODI ANALYZER SESSION LOAD ERROR ===", error);
     setAdminError(error?.message || String(error));
   } finally {
-    setBetAnalyzerLoading(false);
+    if (!silent) setBetAnalyzerLoading(false);
   }
 };
 
@@ -7306,15 +7342,18 @@ const selectJodiAnalyzerSession = (session: any) => {
   void loadJodiAnalyzerModule(session);
 };
 
-const loadJodiAnalyzerModule = async (selectedSession?: any) => {
+const loadJodiAnalyzerModule = async (
+  selectedSession?: any,
+  silent = false
+) => {
   const session = selectedSession || getBetAnalyzerSession();
 
   if (!session?.id) {
-    setAdminError("Select a locked session first.");
+    setAdminError("Select an available session first.");
     return;
   }
 
-  setBetAnalyzerLoading(true);
+  if (!silent) setBetAnalyzerLoading(true);
   setAdminError("");
   setAdminSuccess("");
 
@@ -7409,7 +7448,7 @@ const loadJodiAnalyzerModule = async (selectedSession?: any) => {
     console.error("=== JODI ANALYZER MODULE LOAD ERROR ===", error);
     setAdminError(error?.message || String(error));
   } finally {
-    setBetAnalyzerLoading(false);
+    if (!silent) setBetAnalyzerLoading(false);
   }
 };
 
@@ -7425,16 +7464,17 @@ const selectBetAnalyzerSession = (session: any, mode: "SINGLE" | "PATTI") => {
 
 const loadBetAnalyzerModule = async (
   mode: "SINGLE" | "PATTI",
-  selectedSession?: any
+  selectedSession?: any,
+  silent = false
 ) => {
   const session = selectedSession || getBetAnalyzerSession();
 
   if (!session?.id) {
-    setAdminError("Select a locked session first.");
+    setAdminError("Select an available session first.");
     return;
   }
 
-  setBetAnalyzerLoading(true);
+  if (!silent) setBetAnalyzerLoading(true);
   setAdminError("");
   setAdminSuccess("");
 
@@ -7497,9 +7537,52 @@ const loadBetAnalyzerModule = async (
     console.error("=== BET ANALYZER MODULE LOAD ERROR ===", error);
     setAdminError(error?.message || String(error));
   } finally {
-    setBetAnalyzerLoading(false);
+    if (!silent) setBetAnalyzerLoading(false);
   }
 };
+
+useEffect(() => {
+  if (adminModule !== "BET_ANALYZER") return;
+
+  const refreshBetAnalyzer = () => {
+    if (betAnalyzerView === "SINGLE_SESSIONS") {
+      void loadBetAnalyzerSessions("SINGLE", true);
+      return;
+    }
+
+    if (betAnalyzerView === "PATTI_SESSIONS") {
+      void loadBetAnalyzerSessions("PATTI", true);
+      return;
+    }
+
+    if (betAnalyzerView === "JODI_SESSIONS") {
+      void loadJodiAnalyzerSessions(true);
+      return;
+    }
+
+    if (betAnalyzerView === "SINGLE_ANALYSIS" && betAnalyzerSelectedSession) {
+      void loadBetAnalyzerModule("SINGLE", betAnalyzerSelectedSession, true);
+      return;
+    }
+
+    if (betAnalyzerView === "PATTI_ANALYSIS" && betAnalyzerSelectedSession) {
+      void loadBetAnalyzerModule("PATTI", betAnalyzerSelectedSession, true);
+      return;
+    }
+
+    if (betAnalyzerView === "JODI_ANALYSIS" && betAnalyzerSelectedSession) {
+      void loadJodiAnalyzerModule(betAnalyzerSelectedSession, true);
+    }
+  };
+
+  const timer = setInterval(refreshBetAnalyzer, 5000);
+  return () => clearInterval(timer);
+}, [
+  adminModule,
+  betAnalyzerView,
+  betAnalyzerSelectedSessionId,
+  betAnalyzerSelectedSession,
+]);
 
 const renderBetAnalyzerSessionContext = () => {
   const session = getBetAnalyzerSession();
@@ -7510,6 +7593,15 @@ const renderBetAnalyzerSessionContext = () => {
       {session.bazi_no != null ? ` • Bazi ${session.bazi_no}` : ` • ${session.market}`}
       <br />
       {session.session_date} • {session.session_code} • {session.status}
+      <br />
+      <span
+        className={`admin-status ${getBetAnalyzerBettingStatus(session) === "RUNNING" ? "active" : ""}`}
+        style={{ display: "inline-block", marginTop: "4px" }}
+      >
+        {getBetAnalyzerBettingStatus(session) === "RUNNING"
+          ? "BETTING RUNNING"
+          : "BETTING LOCKED"}
+      </span>
     </div>
   );
 };
@@ -7865,7 +7957,7 @@ Target supply: <b>1,000,000 virtual USD coins</b>. Use the Agent Wallet and Onli
   {betAnalyzerView === "HOME" ? (
     <>
       <p className="admin-account-detail-intro">
-        Only locked sessions with unsettled active bets are available for analysis.
+        Available/running sessions with active bets are available for analysis.
       </p>
 
       <div className="admin-module-grid">
@@ -7875,7 +7967,7 @@ Target supply: <b>1,000,000 virtual USD coins</b>. Use the Agent Wallet and Onli
           onClick={() => {
             resetBetAnalyzerSelection();
             setBetAnalyzerView("SINGLE_SESSIONS");
-            void loadBetAnalyzerSessions();
+            void loadBetAnalyzerSessions("SINGLE");
           }}
         >
           <b>Single Analyzer</b>
@@ -7888,7 +7980,7 @@ Target supply: <b>1,000,000 virtual USD coins</b>. Use the Agent Wallet and Onli
           onClick={() => {
             resetBetAnalyzerSelection();
             setBetAnalyzerView("PATTI_SESSIONS");
-            void loadBetAnalyzerSessions();
+            void loadBetAnalyzerSessions("PATTI");
           }}
         >
           <b>Patti Analyzer</b>
@@ -7932,13 +8024,13 @@ Target supply: <b>1,000,000 virtual USD coins</b>. Use the Agent Wallet and Onli
       </div>
 
       <p className="admin-account-detail-intro">
-        Only locked sessions with unsettled active bets are shown. Result-declared and settled sessions are removed.
+        Available/running sessions with active bets are shown. Locked sessions remain until result settlement completes.
       </p>
 
       {betAnalyzerLoading ? (
-        <div className="admin-empty">LOADING LOCKED SESSIONS...</div>
+        <div className="admin-empty">LOADING AVAILABLE SESSIONS...</div>
       ) : betAnalyzerSessions.length === 0 ? (
-        <div className="admin-empty">No locked sessions are currently waiting for analysis.</div>
+        <div className="admin-empty">No available sessions with active betting are currently waiting for analysis.</div>
       ) : (
         <div className="admin-agent-list">
           {betAnalyzerSessions.map((session) => (
@@ -7963,7 +8055,11 @@ Target supply: <b>1,000,000 virtual USD coins</b>. Use the Agent Wallet and Onli
                 </small>
               </div>
 
-              <span className="admin-status active">BETTING LOCKED</span>
+              <span className={`admin-status ${getBetAnalyzerBettingStatus(session) === "RUNNING" ? "active" : ""}`}>
+                {getBetAnalyzerBettingStatus(session) === "RUNNING"
+                  ? "BETTING RUNNING"
+                  : "BETTING LOCKED"}
+              </span>
 
               <button
                 type="button"
@@ -8116,7 +8212,9 @@ Target supply: <b>1,000,000 virtual USD coins</b>. Use the Agent Wallet and Onli
                 ? "SINGLE_SESSIONS"
                 : "PATTI_SESSIONS"
             );
-            void loadBetAnalyzerSessions();
+            void loadBetAnalyzerSessions(
+              betAnalyzerView === "SINGLE_ANALYSIS" ? "SINGLE" : "PATTI"
+            );
           }}
         >
           BACK
