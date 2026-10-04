@@ -979,14 +979,18 @@ const [settlementSessions, setSettlementSessions] = useState<Array<{
 const [settlementLoading, setSettlementLoading] = useState(false);
 
 // Bet Analyzer
-const [betAnalyzerView, setBetAnalyzerView] = useState<
-  "HOME" | "SINGLE_SESSIONS" | "SINGLE_ANALYSIS" | "PATTI_SESSIONS" | "PATTI_ANALYSIS" | "JODI_SESSIONS" | "JODI_ANALYSIS"
->("HOME");
+const [betAnalyzerView, setBetAnalyzerView] = useState<"HOME" | "ANALYZER">("HOME");
 const [betAnalyzerSessions, setBetAnalyzerSessions] = useState<any[]>([]);
+const [betAnalyzerSelectorSessions, setBetAnalyzerSelectorSessions] = useState<any[]>([]);
 const [betAnalyzerSelectedSessionId, setBetAnalyzerSelectedSessionId] = useState("");
 const [betAnalyzerSelectedSession, setBetAnalyzerSelectedSession] = useState<any | null>(null);
 const [betAnalyzerRows, setBetAnalyzerRows] = useState<any[]>([]);
 const [betAnalyzerLoading, setBetAnalyzerLoading] = useState(false);
+const [betAnalyzerGameId, setBetAnalyzerGameId] = useState("");
+const [betAnalyzerBaziValue, setBetAnalyzerBaziValue] = useState("");
+const [betAnalyzerDate, setBetAnalyzerDate] = useState(getLocalDateString());
+const [betAnalyzerOpenPanel, setBetAnalyzerOpenPanel] = useState<"SINGLE" | "PATTI" | "JODI">("SINGLE");
+const [betAnalyzerHadLiveData, setBetAnalyzerHadLiveData] = useState(false);
 
 const [agentUsername, setAgentUsername] = useState("");
 const [agentFullName, setAgentFullName] = useState("");
@@ -1821,7 +1825,7 @@ useEffect(() => {
       applyingBrowserBack.current = true;
       setAdminModule(state.adminModule || "HOME");
       setSuperAdminAccountView(state.superAdminAccountView || null);
-      setBetAnalyzerView(state.betAnalyzerView || "HOME");
+      setBetAnalyzerView(state.betAnalyzerView === "ANALYZER" ? "ANALYZER" : "HOME");
       return;
     }
 
@@ -7001,6 +7005,7 @@ const resetBetAnalyzerSelection = () => {
   setBetAnalyzerSelectedSessionId("");
   setBetAnalyzerSelectedSession(null);
   setBetAnalyzerRows([]);
+  setBetAnalyzerHadLiveData(false);
 };
 
 const getBetAnalyzerBettingStatus = (session: any) => {
@@ -7022,8 +7027,8 @@ const isBetAnalyzerSessionStarted = (session: any) => {
   return Number.isFinite(openingMs) && Date.now() >= openingMs;
 };
 
-const loadBetAnalyzerSessions = async (
-  mode?: "SINGLE" | "PATTI",
+const loadBetAnalyzerSelectorSessions = async (
+  targetDate = betAnalyzerDate,
   silent = false
 ) => {
   if (!silent) setBetAnalyzerLoading(true);
@@ -7031,43 +7036,18 @@ const loadBetAnalyzerSessions = async (
   setAdminSuccess("");
 
   try {
-    const betTypeFilter =
-      mode === "SINGLE"
-        ? ["Single"]
-        : mode === "PATTI"
-          ? ["Single Patti", "Double Patti", "Triple Patti"]
-          : ["Single", "Single Patti", "Double Patti", "Triple Patti"];
-
     const { data: sessionRows, error: sessionError } = await supabase
       .from("game_sessions")
-      .select("id, session_code, game_id, session_date, bazi_no, market, status, opening_time, deadline_at, scheduled_playable")
-      .eq("session_date", getLocalDateString())
+      .select("id, session_code, game_id, session_date, bazi_no, market, status, market_status, opening_time, deadline_at, scheduled_playable")
+      .eq("session_date", targetDate)
       .eq("scheduled_playable", true)
-      .order("opening_time", { ascending: false });
+      .order("opening_time", { ascending: true });
 
     if (sessionError) throw sessionError;
 
     const rows = sessionRows || [];
-    if (rows.length === 0) {
-      setBetAnalyzerSessions([]);
-      return;
-    }
-
-    const sessionIds = rows.map((row: any) => String(row.id));
-    const { data: activeItems, error: itemsError } = await supabase
-      .from("bet_items")
-      .select("session_id, bet_type")
-      .in("session_id", sessionIds)
-      .eq("status", "ACTIVE")
-      .in("bet_type", betTypeFilter);
-
-    if (itemsError) throw itemsError;
-
-    const sessionsWithActiveBets = new Set(
-      (activeItems || []).map((item: any) => String(item.session_id))
-    );
-
     const gameIds = [...new Set(rows.map((row: any) => row.game_id).filter(Boolean))];
+
     let gameMap = new Map<string, string>();
 
     if (gameIds.length > 0) {
@@ -7077,6 +7057,7 @@ const loadBetAnalyzerSessions = async (
         .in("id", gameIds);
 
       if (gamesError) throw gamesError;
+
       gameMap = new Map(
         (games || []).map((game: any) => [
           String(game.id),
@@ -7085,47 +7066,112 @@ const loadBetAnalyzerSessions = async (
       );
     }
 
-    const normalized = rows
-      .filter(
-        (row: any) =>
-          sessionsWithActiveBets.has(String(row.id)) &&
-          isBetAnalyzerSessionStarted(row)
-      )
-      .map((row: any) => ({
-        id: String(row.id),
-        session_code: String(row.session_code || ""),
-        game_id: String(row.game_id || ""),
-        game_name: gameMap.get(String(row.game_id)) || "Game",
-        session_date: String(row.session_date || ""),
-        bazi_no: row.bazi_no == null ? null : Number(row.bazi_no),
-        market: String(row.market || ""),
-        status: String(row.status || ""),
-        opening_time: String(row.opening_time || ""),
-        deadline_at: String(row.deadline_at || ""),
-        betting_status: getBetAnalyzerBettingStatus(row),
-      }));
+    const normalized = rows.map((row: any) => ({
+      id: String(row.id),
+      session_code: String(row.session_code || ""),
+      game_id: String(row.game_id || ""),
+      game_name: gameMap.get(String(row.game_id)) || "Game",
+      session_date: String(row.session_date || ""),
+      bazi_no: row.bazi_no == null ? null : Number(row.bazi_no),
+      market: String(row.market || ""),
+      status: String(row.status || ""),
+      market_status: String(row.market_status || ""),
+      opening_time: String(row.opening_time || ""),
+      deadline_at: String(row.deadline_at || ""),
+      scheduled_playable: Boolean(row.scheduled_playable),
+    }));
 
-    setBetAnalyzerSessions(normalized);
+    setBetAnalyzerSelectorSessions(normalized);
 
-    if (betAnalyzerSelectedSessionId) {
-      const current = normalized.find(
-        (row: any) => row.id === betAnalyzerSelectedSessionId
-      );
+    const firstGame = normalized.find((row: any) => row.game_id)?.game_id || "";
+    const selectedGameStillExists = normalized.some(
+      (row: any) => String(row.game_id) === String(betAnalyzerGameId)
+    );
+    const nextGameId = selectedGameStillExists ? betAnalyzerGameId : firstGame;
 
-      if (!current) {
-        resetBetAnalyzerSelection();
-      } else {
-        setBetAnalyzerSelectedSession(current);
-      }
-    }
+    setBetAnalyzerGameId(nextGameId);
+
+    const gameSessions = normalized.filter(
+      (row: any) => String(row.game_id) === String(nextGameId)
+    );
+
+    const selectedBaziStillExists = gameSessions.some(
+      (row: any) => String(row.id) === String(betAnalyzerBaziValue)
+    );
+
+    setBetAnalyzerBaziValue(
+      selectedBaziStillExists
+        ? betAnalyzerBaziValue
+        : gameSessions[0]?.id || ""
+    );
   } catch (error: any) {
-    console.error("=== BET ANALYZER SESSION LOAD ERROR ===", error);
+    console.error("=== BET ANALYZER SELECTOR LOAD ERROR ===", error);
     setAdminError(error?.message || String(error));
   } finally {
     if (!silent) setBetAnalyzerLoading(false);
   }
 };
 
+const checkBetAnalyzerLiveData = async (session: any) => {
+  if (!session?.id) return false;
+
+  const previousSession = getJodiPreviousSession(session, betAnalyzerSelectorSessions);
+  const sessionIds = [
+    String(session.id),
+    previousSession ? String(previousSession.id) : "",
+  ].filter(Boolean);
+
+  const { data: items, error } = await supabase
+    .from("bet_items")
+    .select("session_id, bet_type, stake, status")
+    .in("session_id", sessionIds)
+    .in("bet_type", ["Single", "Single Patti", "Double Patti", "Triple Patti", "Jodi"]);
+
+  if (error) throw error;
+
+  return (items || []).some((item: any) => {
+    const sessionId = String(item.session_id);
+    const status = String(item.status || "").toUpperCase();
+    const stake = Number(item.stake || 0);
+
+    if (stake <= 0) return false;
+    if (sessionId === String(session.id)) return status === "ACTIVE";
+
+    return (
+      sessionId === String(previousSession?.id || "") &&
+      String(item.bet_type || "") === "Jodi" &&
+      status === "ACTIVE"
+    );
+  });
+};
+
+const analyzeSelectedBetAnalyzerSession = async () => {
+  const session = betAnalyzerSelectorSessions.find(
+    (row: any) => String(row.id) === String(betAnalyzerBaziValue)
+  );
+
+  if (!session?.id) {
+    setAdminError("Please select Game, Bazi and Date first.");
+    return;
+  }
+
+  setBetAnalyzerSelectedSessionId(String(session.id));
+  setBetAnalyzerSelectedSession(session);
+  setBetAnalyzerSessions([session]);
+  setBetAnalyzerRows([]);
+  setAdminError("");
+  setAdminSuccess("");
+  setBetAnalyzerOpenPanel("SINGLE");
+
+  try {
+    setBetAnalyzerHadLiveData(await checkBetAnalyzerLiveData(session));
+  } catch (error: any) {
+    setAdminError(error?.message || String(error));
+    return;
+  }
+
+  await loadBetAnalyzerModule("SINGLE", session);
+};
 
 const getJodiPreviousSession = (
   session: any,
@@ -7197,149 +7243,107 @@ const getJodiNextSession = (
   );
 };
 
-const loadJodiAnalyzerSessions = async (silent = false) => {
+const loadBetAnalyzerModule = async (
+  mode: "SINGLE" | "PATTI",
+  selectedSession?: any,
+  silent = false
+) => {
+  const session = selectedSession || getBetAnalyzerSession();
+
+  if (!session?.id) {
+    setAdminError("Please select an available session first.");
+    return;
+  }
+
   if (!silent) setBetAnalyzerLoading(true);
   setAdminError("");
   setAdminSuccess("");
 
   try {
-    const { data: sessionRows, error: sessionError } = await supabase
-      .from("game_sessions")
-      .select(
-        "id, session_code, game_id, session_date, bazi_no, market, status, opening_time, deadline_at, scheduled_playable"
-      )
-      .eq("session_date", getLocalDateString())
-      .eq("scheduled_playable", true)
-      .order("opening_time", { ascending: false });
+    const sessionId = String(session.id);
+    const betTypeFilter =
+      mode === "SINGLE"
+        ? ["Single"]
+        : ["Single Patti", "Double Patti", "Triple Patti"];
 
-    if (sessionError) throw sessionError;
-
-    const rows = sessionRows || [];
-    if (rows.length === 0) {
-      setBetAnalyzerSessions([]);
-      return;
-    }
-
-    const gameIds = [
-      ...new Set(rows.map((row: any) => row.game_id).filter(Boolean)),
-    ];
-
-    let gameMap = new Map<string, string>();
-
-    if (gameIds.length > 0) {
-      const { data: games, error: gamesError } = await supabase
-        .from("games")
-        .select("id, game_name")
-        .in("id", gameIds);
-
-      if (gamesError) throw gamesError;
-
-      gameMap = new Map(
-        (games || []).map((game: any) => [
-          String(game.id),
-          String(game.game_name || "Game"),
-        ])
-      );
-    }
-
-    const allSessions = rows.map((row: any) => ({
-      id: String(row.id),
-      session_code: String(row.session_code || ""),
-      game_id: String(row.game_id || ""),
-      game_name: gameMap.get(String(row.game_id)) || "Game",
-      session_date: String(row.session_date || ""),
-      bazi_no: row.bazi_no == null ? null : Number(row.bazi_no),
-      market: String(row.market || ""),
-      status: String(row.status || ""),
-      opening_time: String(row.opening_time || ""),
-      deadline_at: String(row.deadline_at || ""),
-    }));
-
-    const sessionIds = allSessions.map((session: any) => session.id);
-
-    const { data: jodiItems, error: jodiItemsError } = await supabase
+    const { data: items, error: itemsError } = await supabase
       .from("bet_items")
-      .select("session_id, bet_type, played_number, stake, status")
-      .in("session_id", sessionIds)
-      .eq("bet_type", "Jodi");
+      .select("session_id, bet_id, bet_type, played_number, stake, status")
+      .eq("session_id", sessionId)
+      .eq("status", "ACTIVE")
+      .in("bet_type", betTypeFilter);
 
-    if (jodiItemsError) throw jodiItemsError;
+    if (itemsError) throw itemsError;
 
-    const jodiItemsBySession = new Map<string, any[]>();
+    const aggregate = new Map<
+      string,
+      { played_number: string; total_stake: number }
+    >();
 
-    for (const item of jodiItems || []) {
-      const key = String(item.session_id);
-      const list = jodiItemsBySession.get(key) || [];
-      list.push(item);
-      jodiItemsBySession.set(key, list);
+    for (const item of items || []) {
+      const playedNumber = String(item.played_number ?? "").trim();
+      if (!playedNumber) continue;
+
+      const current =
+        aggregate.get(playedNumber) || {
+          played_number: playedNumber,
+          total_stake: 0,
+        };
+
+      current.total_stake += Number(item.stake || 0);
+      aggregate.set(playedNumber, current);
     }
 
-    const normalized = allSessions
-      .filter(
-        (session: any) =>
-          isBetAnalyzerSessionStarted(session)
-      )
-      .map((session: any) => {
-        const previousSession = getJodiPreviousSession(session, allSessions);
-        const currentItems = jodiItemsBySession.get(session.id) || [];
-
-        const hasCurrentJodi = currentItems.some(
-          (item: any) =>
-            String(item.status || "").toUpperCase() === "ACTIVE" &&
-            Number(item.stake || 0) > 0
-        );
-
-        const previousItems = previousSession
-          ? jodiItemsBySession.get(previousSession.id) || []
-          : [];
-
-        const hasPreviousJodi = previousItems.some(
-          (item: any) =>
-            !["REFUNDED", "REVERSED"].includes(
-              String(item.status || "").toUpperCase()
-            ) && Number(item.stake || 0) > 0
-        );
-
-        if (!hasCurrentJodi && !hasPreviousJodi) return null;
-
-        return {
-          ...session,
-          jodi_previous_session: previousSession,
-          jodi_next_session: getJodiNextSession(session, allSessions),
-          betting_status: getBetAnalyzerBettingStatus(session),
-        };
-      })
-      .filter(Boolean);
-
-    setBetAnalyzerSessions(normalized);
-
-    if (betAnalyzerSelectedSessionId) {
-      const current = normalized.find(
-        (row: any) => row.id === betAnalyzerSelectedSessionId
+    const activeRows = [...aggregate.values()]
+      .filter((row) => row.total_stake > 0)
+      .sort(
+        (a, b) =>
+          b.total_stake - a.total_stake ||
+          a.played_number.localeCompare(b.played_number)
       );
 
-      if (!current) {
-        resetBetAnalyzerSelection();
-      } else {
-        setBetAnalyzerSelectedSession(current);
-      }
+    if (mode === "SINGLE" && activeRows.length > 0) {
+      const amountByNumber = new Map(
+        activeRows.map((row) => [String(row.played_number), row.total_stake])
+      );
+
+      setBetAnalyzerRows(
+        Array.from({ length: 10 }, (_, index) => {
+          const number = String(index);
+          return {
+            session_id: sessionId,
+            game_name: session.game_name,
+            session_date: session.session_date,
+            bazi_no: session.bazi_no,
+            market: session.market,
+            session_code: session.session_code,
+            bet_type: "SINGLE",
+            played_number: number,
+            total_stake: Number(amountByNumber.get(number) || 0),
+          };
+        })
+      );
+    } else {
+      setBetAnalyzerRows(
+        activeRows.map((row) => ({
+          session_id: sessionId,
+          game_name: session.game_name,
+          session_date: session.session_date,
+          bazi_no: session.bazi_no,
+          market: session.market,
+          session_code: session.session_code,
+          bet_type: mode,
+          played_number: row.played_number,
+          total_stake: row.total_stake,
+        }))
+      );
     }
   } catch (error: any) {
-    console.error("=== JODI ANALYZER SESSION LOAD ERROR ===", error);
+    console.error("=== BET ANALYZER MODULE LOAD ERROR ===", error);
     setAdminError(error?.message || String(error));
   } finally {
     if (!silent) setBetAnalyzerLoading(false);
   }
-};
-
-const selectJodiAnalyzerSession = (session: any) => {
-  setBetAnalyzerSelectedSessionId(String(session.id));
-  setBetAnalyzerSelectedSession(session);
-  setBetAnalyzerRows([]);
-  setAdminError("");
-  setAdminSuccess("");
-  setBetAnalyzerView("JODI_ANALYSIS");
-  void loadJodiAnalyzerModule(session);
 };
 
 const loadJodiAnalyzerModule = async (
@@ -7349,7 +7353,7 @@ const loadJodiAnalyzerModule = async (
   const session = selectedSession || getBetAnalyzerSession();
 
   if (!session?.id) {
-    setAdminError("Select an available session first.");
+    setAdminError("Please select an available session first.");
     return;
   }
 
@@ -7359,7 +7363,9 @@ const loadJodiAnalyzerModule = async (
 
   try {
     const currentSessionId = String(session.id);
-    const previousSession = session.jodi_previous_session || null;
+    const allSessions = betAnalyzerSelectorSessions;
+    const previousSession = getJodiPreviousSession(session, allSessions);
+    const nextSession = getJodiNextSession(session, allSessions);
     const previousSessionId = previousSession
       ? String(previousSession.id)
       : "";
@@ -7439,7 +7445,7 @@ const loadJodiAnalyzerModule = async (
       rows.push(...aggregate(previousItems, "PREVIOUS"));
     }
 
-    if (session.jodi_next_session) {
+    if (nextSession) {
       rows.push(...aggregate(currentItems, "FORWARD"));
     }
 
@@ -7452,152 +7458,80 @@ const loadJodiAnalyzerModule = async (
   }
 };
 
-const selectBetAnalyzerSession = (session: any, mode: "SINGLE" | "PATTI") => {
-  setBetAnalyzerSelectedSessionId(String(session.id));
-  setBetAnalyzerSelectedSession(session);
-  setBetAnalyzerRows([]);
-  setAdminError("");
-  setAdminSuccess("");
-  setBetAnalyzerView(mode === "SINGLE" ? "SINGLE_ANALYSIS" : "PATTI_ANALYSIS");
-  void loadBetAnalyzerModule(mode, session);
-};
-
-const loadBetAnalyzerModule = async (
-  mode: "SINGLE" | "PATTI",
-  selectedSession?: any,
-  silent = false
-) => {
-  const session = selectedSession || getBetAnalyzerSession();
-
-  if (!session?.id) {
-    setAdminError("Select an available session first.");
-    return;
-  }
-
-  if (!silent) setBetAnalyzerLoading(true);
-  setAdminError("");
-  setAdminSuccess("");
-
-  try {
-    const sessionId = String(session.id);
-    const betTypeFilter =
-      mode === "SINGLE"
-        ? ["Single"]
-        : ["Single Patti", "Double Patti", "Triple Patti"];
-
-    const { data: items, error: itemsError } = await supabase
-      .from("bet_items")
-      .select("session_id, bet_id, bet_type, played_number, stake, status")
-      .eq("session_id", sessionId)
-      .eq("status", "ACTIVE")
-      .in("bet_type", betTypeFilter);
-
-    if (itemsError) throw itemsError;
-
-    const aggregate = new Map<
-      string,
-      { played_number: string; total_stake: number }
-    >();
-
-    for (const item of items || []) {
-      const playedNumber = String(item.played_number ?? "").trim();
-      if (!playedNumber) continue;
-
-      const current =
-        aggregate.get(playedNumber) || {
-          played_number: playedNumber,
-          total_stake: 0,
-        };
-
-      current.total_stake += Number(item.stake || 0);
-      aggregate.set(playedNumber, current);
-    }
-
-    const rows = [...aggregate.values()]
-      .filter((row) => row.total_stake > 0)
-      .sort(
-        (a, b) =>
-          b.total_stake - a.total_stake ||
-          a.played_number.localeCompare(b.played_number)
-      )
-      .map((row) => ({
-        session_id: sessionId,
-        game_name: session.game_name,
-        session_date: session.session_date,
-        bazi_no: session.bazi_no,
-        market: session.market,
-        session_code: session.session_code,
-        bet_type: mode,
-        played_number: row.played_number,
-        total_stake: row.total_stake,
-      }));
-
-    setBetAnalyzerRows(rows);
-  } catch (error: any) {
-    console.error("=== BET ANALYZER MODULE LOAD ERROR ===", error);
-    setAdminError(error?.message || String(error));
-  } finally {
-    if (!silent) setBetAnalyzerLoading(false);
-  }
-};
-
 useEffect(() => {
   if (adminModule !== "BET_ANALYZER") return;
+  void loadBetAnalyzerSelectorSessions(betAnalyzerDate, true);
+}, [adminModule, betAnalyzerDate]);
 
-  const refreshBetAnalyzer = () => {
-    if (betAnalyzerView === "SINGLE_SESSIONS") {
-      void loadBetAnalyzerSessions("SINGLE", true);
+useEffect(() => {
+  if (adminModule !== "BET_ANALYZER" || betAnalyzerView !== "ANALYZER") return;
+
+  const timer = setInterval(async () => {
+    const session = getBetAnalyzerSession();
+    if (!session?.id) return;
+
+    try {
+      const hasLiveData = await checkBetAnalyzerLiveData(session);
+
+      if (hasLiveData) {
+        if (!betAnalyzerHadLiveData) setBetAnalyzerHadLiveData(true);
+      } else if (betAnalyzerHadLiveData) {
+        resetBetAnalyzerSelection();
+        return;
+      }
+    } catch (error: any) {
+      console.error("=== BET ANALYZER LIVE STATE CHECK ERROR ===", error);
       return;
     }
 
-    if (betAnalyzerView === "PATTI_SESSIONS") {
-      void loadBetAnalyzerSessions("PATTI", true);
+    if (betAnalyzerOpenPanel === "SINGLE") {
+      void loadBetAnalyzerModule("SINGLE", session, true);
       return;
     }
 
-    if (betAnalyzerView === "JODI_SESSIONS") {
-      void loadJodiAnalyzerSessions(true);
+    if (betAnalyzerOpenPanel === "PATTI") {
+      void loadBetAnalyzerModule("PATTI", session, true);
       return;
     }
 
-    if (betAnalyzerView === "SINGLE_ANALYSIS" && betAnalyzerSelectedSession) {
-      void loadBetAnalyzerModule("SINGLE", betAnalyzerSelectedSession, true);
-      return;
+    if (betAnalyzerOpenPanel === "JODI") {
+      void loadJodiAnalyzerModule(session, true);
     }
+  }, 2000);
 
-    if (betAnalyzerView === "PATTI_ANALYSIS" && betAnalyzerSelectedSession) {
-      void loadBetAnalyzerModule("PATTI", betAnalyzerSelectedSession, true);
-      return;
-    }
-
-    if (betAnalyzerView === "JODI_ANALYSIS" && betAnalyzerSelectedSession) {
-      void loadJodiAnalyzerModule(betAnalyzerSelectedSession, true);
-    }
-  };
-
-  const timer = setInterval(refreshBetAnalyzer, 5000);
   return () => clearInterval(timer);
 }, [
   adminModule,
   betAnalyzerView,
   betAnalyzerSelectedSessionId,
   betAnalyzerSelectedSession,
+  betAnalyzerOpenPanel,
+  betAnalyzerSelectorSessions,
+  betAnalyzerHadLiveData,
 ]);
 
 const renderBetAnalyzerSessionContext = () => {
   const session = getBetAnalyzerSession();
   if (!session) return null;
+
   return (
-    <div className="admin-form-note" style={{ marginBottom: "10px" }}>
-      <b style={{ color: "#ffd13b" }}>{session.game_name}</b>
-      {session.bazi_no != null ? ` • Bazi ${session.bazi_no}` : ` • ${session.market}`}
-      <br />
-      {session.session_date} • {session.session_code} • {session.status}
-      <br />
-      <span
-        className={`admin-status ${getBetAnalyzerBettingStatus(session) === "RUNNING" ? "active" : ""}`}
-        style={{ display: "inline-block", marginTop: "4px" }}
-      >
+    <div
+      className="bet-analyzer-session-header"
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: "10px",
+        flexWrap: "wrap",
+      }}
+    >
+      <div style={{ flex: 1, minWidth: "220px" }}>
+        <b>{session.game_name}{session.bazi_no != null ? ` - Bazi ${session.bazi_no}` : ` - ${session.market}`}</b>
+        <small>
+          {session.session_date} • {session.session_code} • {String(session.market || "").toUpperCase()}
+        </small>
+      </div>
+      <span className={`admin-status ${getBetAnalyzerBettingStatus(session) === "RUNNING" ? "active" : ""}`}>
         {getBetAnalyzerBettingStatus(session) === "RUNNING"
           ? "BETTING RUNNING"
           : "BETTING LOCKED"}
@@ -7644,7 +7578,7 @@ const renderSuperAdminArea = () => (
               : adminModule === "SETTLEMENT"
                 ? "Settle result-declared game sessions and release customer exposure."
               : adminModule === "BET_ANALYZER"
-                ? "Analyze locked Game / Bazi betting activity before settlement."
+                ? "Select Game, Bazi and Date to analyze live betting activity."
               : adminModule === "AUDIT"
                 ? "Traceable activity history from the verified audit trail."
               : "Manage agents, customers, virtual coin wallets, results, settlement and reports."}
@@ -7680,7 +7614,7 @@ onClick={() => {
   } else if (adminModule === "BET_ANALYZER") {
     if (betAnalyzerView !== "HOME") {
       setBetAnalyzerView("HOME");
-      setBetAnalyzerRows([]);
+      resetBetAnalyzerSelection();
       setAdminError("");
       setAdminSuccess("");
     } else {
@@ -7726,7 +7660,7 @@ disabled={adminModule === "HOME" && adminLoading}
 <button className="admin-module-card" onClick={()=>{setAdminModule("AGENT_ADMIN");setAdminError("");}}><b>Agent Admin</b><small>Create Agent Admin accounts</small></button>
 <button className="admin-module-card" onClick={()=>{setAdminModule("PASSWORD_RESET");setAdminPasswordResetTarget("");setAdminPasswordResetPassword("");setAdminError("");setAdminSuccess("");}}><b>Password Reset</b><small>Agent Admin + Online Customer password reset</small></button>
 <button className="admin-module-card" onClick={()=>{setAdminModule("RESULTS");setResultGameId("");setResultDate("");setResultSessionId("");setResultSingleDigit("");setResultPatti("");setResultCurrent(null);setAdminError("");setAdminSuccess("");void loadResultsModule();}}><b>Results</b><small>Declare game results</small></button>
-{[["Settlement","Settle market / Bazi"],["Bet Analyzer","Single / Patti / Jodi analysis"],["Reports","Betting activity reports"],["Audit","Traceable activity history"]].map(([title,sub])=><button key={title} className="admin-module-card" onClick={()=>{if(title==="Settlement"){setAdminModule("SETTLEMENT");setAdminError("");setAdminSuccess("");void loadSettlementModule();}else if(title==="Bet Analyzer"){setAdminModule("BET_ANALYZER");setBetAnalyzerView("HOME");setBetAnalyzerRows([]);setAdminError("");setAdminSuccess("");void loadBetAnalyzerSessions();}else if(title==="Reports"){setAdminModule("REPORTS");setReportsRows([]);setReportsPage(0);setReportsTotal(0);setAdminError("");setAdminSuccess("");void loadSuperAdminReports(0);}else if(title==="Audit"){setAdminModule("AUDIT");setAuditRows([]);setAuditPage(0);setAuditHasNext(false);setAdminError("");setAdminSuccess("");void loadAuditModule(0);}else setAdminError(`${title} module is the next build step.`);}}><b>{title}</b><small>{sub}</small></button>)}
+{[["Settlement","Settle market / Bazi"],["Bet Analyzer","Single / Patti / Jodi analysis"],["Reports","Betting activity reports"],["Audit","Traceable activity history"]].map(([title,sub])=><button key={title} className="admin-module-card" onClick={()=>{if(title==="Settlement"){setAdminModule("SETTLEMENT");setAdminError("");setAdminSuccess("");void loadSettlementModule();}else if(title==="Bet Analyzer"){setAdminModule("BET_ANALYZER");setBetAnalyzerView("ANALYZER");setBetAnalyzerRows([]);setBetAnalyzerOpenPanel("SINGLE");setBetAnalyzerDate(getLocalDateString());setBetAnalyzerGameId("");setBetAnalyzerBaziValue("");setBetAnalyzerSelectedSessionId("");setBetAnalyzerSelectedSession(null);setBetAnalyzerHadLiveData(false);setAdminError("");setAdminSuccess("");}else if(title==="Reports"){setAdminModule("REPORTS");setReportsRows([]);setReportsPage(0);setReportsTotal(0);setAdminError("");setAdminSuccess("");void loadSuperAdminReports(0);}else if(title==="Audit"){setAdminModule("AUDIT");setAuditRows([]);setAuditPage(0);setAuditHasNext(false);setAdminError("");setAdminSuccess("");void loadAuditModule(0);}else setAdminError(`${title} module is the next build step.`);}}><b>{title}</b><small>{sub}</small></button>)}
 </section>
 <section className="admin-supply-card">
 <div className="admin-section-kicker">VIRTUAL COIN CONTROL</div>
@@ -7938,319 +7872,321 @@ Target supply: <b>1,000,000 virtual USD coins</b>. Use the Agent Wallet and Onli
 <section className="admin-panel-card">
   <div className="admin-panel-title-row">
     <div className="admin-panel-title">BET ANALYZER</div>
-    {betAnalyzerView !== "HOME" ? (
-      <button
-        type="button"
-        className="admin-small-action"
-        onClick={() => {
-          resetBetAnalyzerSelection();
-          setBetAnalyzerView("HOME");
-          setAdminError("");
-          setAdminSuccess("");
-        }}
-      >
-        BACK
-      </button>
-    ) : null}
   </div>
 
-  {betAnalyzerView === "HOME" ? (
-    <>
-      <p className="admin-account-detail-intro">
-        Available/running sessions with active bets are available for analysis.
-      </p>
+  <div className="bet-analyzer-selector-grid">
+    <div className="admin-form-field">
+      <label>SELECT GAME</label>
+      <select
+        className="admin-form-input"
+        value={betAnalyzerGameId}
+        onChange={(e) => {
+          const gameId = e.target.value;
+          setBetAnalyzerGameId(gameId);
+          const gameSessions = betAnalyzerSelectorSessions.filter(
+            (session: any) => String(session.game_id) === String(gameId)
+          );
+          setBetAnalyzerBaziValue(gameSessions[0]?.id || "");
+          setBetAnalyzerSelectedSessionId("");
+          setBetAnalyzerSelectedSession(null);
+          setBetAnalyzerRows([]);
+        }}
+      >
+        <option value="">Select Game</option>
+        {[...new Map(
+          betAnalyzerSelectorSessions.map((session: any) => [
+            String(session.game_id),
+            session.game_name,
+          ])
+        )].map(([gameId, gameName]) => (
+          <option key={String(gameId)} value={String(gameId)}>
+            {String(gameName)}
+          </option>
+        ))}
+      </select>
+    </div>
 
-      <div className="admin-module-grid">
-        <button
-          type="button"
-          className="admin-module-card"
-          onClick={() => {
-            resetBetAnalyzerSelection();
-            setBetAnalyzerView("SINGLE_SESSIONS");
-            void loadBetAnalyzerSessions("SINGLE");
-          }}
-        >
-          <b>Single Analyzer</b>
-          <small>Analyze total money on played Single numbers</small>
-        </button>
-
-        <button
-          type="button"
-          className="admin-module-card"
-          onClick={() => {
-            resetBetAnalyzerSelection();
-            setBetAnalyzerView("PATTI_SESSIONS");
-            void loadBetAnalyzerSessions("PATTI");
-          }}
-        >
-          <b>Patti Analyzer</b>
-          <small>Analyze total money on played Patti numbers</small>
-        </button>
-
-        <button
-          type="button"
-          className="admin-module-card"
-          onClick={() => {
-            resetBetAnalyzerSelection();
-            setBetAnalyzerView("JODI_SESSIONS");
-            void loadJodiAnalyzerSessions();
-          }}
-        >
-          <b>Jodi Analyzer</b>
-          <small>Analyze Jodi carry-forward and next-bazi bets</small>
-        </button>
-      </div>
-    </>
-  ) : betAnalyzerView === "SINGLE_SESSIONS" || betAnalyzerView === "PATTI_SESSIONS" || betAnalyzerView === "JODI_SESSIONS" ? (
-    <>
-      <div className="admin-panel-title-row">
-        <div className="admin-panel-title">
-          {betAnalyzerView === "SINGLE_SESSIONS"
-            ? "SINGLE ANALYZER"
-            : betAnalyzerView === "PATTI_SESSIONS"
-              ? "PATTI ANALYZER"
-              : "JODI ANALYZER"}
-        </div>
-        <button
-          type="button"
-          className="admin-small-action"
-          onClick={() => {
-            resetBetAnalyzerSelection();
-            setBetAnalyzerView("HOME");
-          }}
-        >
-          BACK
-        </button>
-      </div>
-
-      <p className="admin-account-detail-intro">
-        Available/running sessions with active bets are shown. Locked sessions remain until result settlement completes.
-      </p>
-
-      {betAnalyzerLoading ? (
-        <div className="admin-empty">LOADING AVAILABLE SESSIONS...</div>
-      ) : betAnalyzerSessions.length === 0 ? (
-        <div className="admin-empty">No available sessions with active betting are currently waiting for analysis.</div>
-      ) : (
-        <div className="admin-agent-list">
-          {betAnalyzerSessions.map((session) => (
-            <div
-              className="admin-agent-row"
-              key={session.id}
-              style={{ alignItems: "center", gap: "10px", flexWrap: "wrap" }}
-            >
-              <div style={{ flex: 1, minWidth: "220px" }}>
-                <b>
-                  {session.game_name}
-                  {session.bazi_no != null
-                    ? ` — Bazi ${session.bazi_no}`
-                    : ` — ${session.market}`}
-                </b>
-                <small>{session.session_date} • {session.session_code}</small>
-                <small>
-                  Lock deadline{" "}
-                  {session.deadline_at
-                    ? new Date(session.deadline_at).toLocaleString("en-IN")
-                    : "-"}
-                </small>
-              </div>
-
-              <span className={`admin-status ${getBetAnalyzerBettingStatus(session) === "RUNNING" ? "active" : ""}`}>
-                {getBetAnalyzerBettingStatus(session) === "RUNNING"
-                  ? "BETTING RUNNING"
-                  : "BETTING LOCKED"}
-              </span>
-
-              <button
-                type="button"
-                className="admin-small-action"
-                onClick={() => {
-                  if (betAnalyzerView === "JODI_SESSIONS") {
-                    selectJodiAnalyzerSession(session);
-                  } else {
-                    selectBetAnalyzerSession(
-                      session,
-                      betAnalyzerView === "SINGLE_SESSIONS" ? "SINGLE" : "PATTI"
-                    );
-                  }
-                }}
-              >
-                SELECT
-              </button>
-            </div>
+    <div className="admin-form-field">
+      <label>SELECT BAZI</label>
+      <select
+        className="admin-form-input"
+        value={betAnalyzerBaziValue}
+        onChange={(e) => {
+          setBetAnalyzerBaziValue(e.target.value);
+          setBetAnalyzerSelectedSessionId("");
+          setBetAnalyzerSelectedSession(null);
+          setBetAnalyzerRows([]);
+        }}
+        disabled={!betAnalyzerGameId}
+      >
+        <option value="">Select Bazi</option>
+        {betAnalyzerSelectorSessions
+          .filter((session: any) => String(session.game_id) === String(betAnalyzerGameId))
+          .map((session: any) => (
+            <option key={session.id} value={session.id}>
+              {session.bazi_no != null ? `Bazi ${session.bazi_no}` : String(session.market || "").toUpperCase()}
+            </option>
           ))}
-        </div>
-      )}
-    </>
-  ) : betAnalyzerView === "JODI_ANALYSIS" ? (
-    <>
-      <div className="admin-panel-title-row">
-        <div className="admin-panel-title">JODI ANALYZER</div>
-        <button
-          type="button"
-          className="admin-small-action"
-          onClick={() => {
-            setBetAnalyzerRows([]);
-            setBetAnalyzerView("JODI_SESSIONS");
-            void loadJodiAnalyzerSessions();
-          }}
-        >
-          BACK
-        </button>
-      </div>
+      </select>
+    </div>
 
-      {renderBetAnalyzerSessionContext()}
+    <div className="admin-form-field">
+      <label>SELECT DATE</label>
+      <input
+        className="admin-form-input"
+        type="date"
+        value={betAnalyzerDate}
+        onChange={(e) => {
+          const nextDate = e.target.value || getLocalDateString();
+          setBetAnalyzerDate(nextDate);
+          setBetAnalyzerSelectedSessionId("");
+          setBetAnalyzerSelectedSession(null);
+          setBetAnalyzerRows([]);
+          setBetAnalyzerGameId("");
+          setBetAnalyzerBaziValue("");
+        }}
+      />
+    </div>
 
-      {betAnalyzerLoading ? (
-        <div className="admin-empty">LOADING JODI ANALYSIS...</div>
-      ) : betAnalyzerRows.length === 0 ? (
-        <div className="admin-empty">
-          No Jodi betting data was found for this session.
-        </div>
-      ) : (
-        <>
-          {(() => {
-            const session = getBetAnalyzerSession();
-            const previousSession = session?.jodi_previous_session || null;
-            const nextSession = session?.jodi_next_session || null;
-            const gameName = String(session?.game_name || "").trim().toLowerCase();
-            const isMainBazar = gameName === "main bazar";
-
-            const previousRows = betAnalyzerRows.filter(
-              (row: any) => row.section === "PREVIOUS"
-            );
-            const forwardRows = betAnalyzerRows.filter(
-              (row: any) => row.section === "FORWARD"
-            );
-
-            const previousTitle = isMainBazar
-              ? "CARRY FORWARD FROM OPEN"
-              : previousSession
-                ? `PREVIOUS / CARRY FROM BAZI ${previousSession.bazi_no}`
-                : "PREVIOUS / CARRY";
-
-            const forwardTitle = isMainBazar
-              ? "NEW / FORWARD TO CLOSE"
-              : nextSession
-                ? `NEW / FORWARD TO BAZI ${nextSession.bazi_no}`
-                : "NEW / FORWARD";
-
-            return (
-              <>
-                {previousRows.length > 0 ? (
-                  <section className="admin-panel-card" style={{ marginBottom: "10px" }}>
-                    <div className="admin-panel-title">{previousTitle}</div>
-                    <div className="admin-form-note">
-                      {previousSession
-                        ? `${previousSession.session_code} • ${previousSession.status}`
-                        : "Previous Jodi bets resolving with this session."}
-                    </div>
-                    <div className="admin-agent-list">
-                      {previousRows.map((row: any) => (
-                        <div
-                          className="admin-agent-row"
-                          key={`previous-${row.played_number}`}
-                        >
-                          <div>
-                            <b>{row.played_number}</b>
-                          </div>
-                          <strong className="admin-available-value">
-                            ${Number(row.total_stake || 0).toFixed(2)}
-                          </strong>
-                        </div>
-                      ))}
-                    </div>
-                  </section>
-                ) : null}
-
-                {forwardRows.length > 0 ? (
-                  <section className="admin-panel-card">
-                    <div className="admin-panel-title">{forwardTitle}</div>
-                    <div className="admin-form-note">
-                      {nextSession
-                        ? `${nextSession.session_code} • ${nextSession.status}`
-                        : "Current Jodi bets resolving with the next session."}
-                    </div>
-                    <div className="admin-agent-list">
-                      {forwardRows.map((row: any) => (
-                        <div
-                          className="admin-agent-row"
-                          key={`forward-${row.played_number}`}
-                        >
-                          <div>
-                            <b>{row.played_number}</b>
-                          </div>
-                          <strong className="admin-available-value">
-                            ${Number(row.total_stake || 0).toFixed(2)}
-                          </strong>
-                        </div>
-                      ))}
-                    </div>
-                  </section>
-                ) : null}
-              </>
-            );
-          })()}
-        </>
-      )}
-    </>
-  ) : (
-    <>
-      <div className="admin-panel-title-row">
-        <div className="admin-panel-title">
-          {betAnalyzerView === "SINGLE_ANALYSIS"
-            ? "SINGLE ANALYZER"
-            : "PATTI ANALYZER"}
-        </div>
-        <button
-          type="button"
-          className="admin-small-action"
-          onClick={() => {
-            setBetAnalyzerRows([]);
-            setBetAnalyzerView(
-              betAnalyzerView === "SINGLE_ANALYSIS"
-                ? "SINGLE_SESSIONS"
-                : "PATTI_SESSIONS"
-            );
-            void loadBetAnalyzerSessions(
-              betAnalyzerView === "SINGLE_ANALYSIS" ? "SINGLE" : "PATTI"
-            );
-          }}
-        >
-          BACK
-        </button>
-      </div>
-
-      {renderBetAnalyzerSessionContext()}
-
-      {betAnalyzerLoading ? (
-        <div className="admin-empty">LOADING ANALYSIS...</div>
-      ) : betAnalyzerRows.length === 0 ? (
-        <div className="admin-empty">
-          No active {betAnalyzerView === "SINGLE_ANALYSIS" ? "Single" : "Patti"} betting data was found for this session.
-        </div>
-      ) : (
-        <div className="admin-agent-list">
-          {betAnalyzerRows.map((row: any) => (
-            <div
-              className="admin-agent-row"
-              key={`${row.bet_type}-${row.played_number}`}
-            >
-              <div>
-                <b>{row.played_number}</b>
-              </div>
-              <strong className="admin-available-value">
-                ${Number(row.total_stake || 0).toFixed(2)}
-              </strong>
-            </div>
-          ))}
-        </div>
-      )}
-    </>
-  )}
+    <button
+      type="button"
+      className="admin-create-btn bet-analyzer-analyze-btn"
+      onClick={() => void analyzeSelectedBetAnalyzerSession()}
+      disabled={betAnalyzerLoading || !betAnalyzerGameId || !betAnalyzerBaziValue}
+    >
+      ANALYZE
+    </button>
+  </div>
 </section>
+
+{getBetAnalyzerSession() ? (
+  <>
+    <section className="admin-panel-card">
+      {renderBetAnalyzerSessionContext()}
+    </section>
+
+    <section className="admin-panel-card bet-analyzer-section">
+      <button
+        type="button"
+        className={`bet-analyzer-accordion ${betAnalyzerOpenPanel === "SINGLE" ? "open" : ""}`}
+        onClick={() => {
+          setBetAnalyzerOpenPanel("SINGLE");
+          const session = getBetAnalyzerSession();
+          if (session) void loadBetAnalyzerModule("SINGLE", session);
+        }}
+      >
+        <span>
+          <b>SINGLE ANALYZER</b>
+          <small>Analyze Single betting activity.</small>
+        </span>
+        <strong>{betAnalyzerOpenPanel === "SINGLE" ? "⌃" : "⌄"}</strong>
+      </button>
+
+      {betAnalyzerOpenPanel === "SINGLE" ? (
+        <div className="bet-analyzer-content">
+          {betAnalyzerLoading ? (
+            <div className="admin-empty">LOADING ANALYSIS...</div>
+          ) : betAnalyzerRows.length === 0 ? (
+            <div className="admin-empty">
+              No active Single bets are available for this session.
+            </div>
+          ) : (
+            <>
+              <div className="bet-analyzer-rate-row">
+                <span>Single Rate (Win 1 Number)</span>
+                <strong>9X</strong>
+              </div>
+
+              <div className="bet-analyzer-grid">
+                {betAnalyzerRows.map((row: any) => (
+                  <div
+                    className={`bet-analyzer-number-card ${Number(row.total_stake || 0) > 0 ? "has-bet" : "no-bet"}`}
+                    key={`single-${row.played_number}`}
+                  >
+                    <b>{row.played_number}</b>
+                    <strong>${Number(row.total_stake || 0).toFixed(2)}</strong>
+                    <small>
+                      Total Stake: {Number(row.total_stake || 0) > 0
+                        ? Number(row.total_stake || 0).toFixed(2)
+                        : "0"}
+                    </small>
+                  </div>
+                ))}
+              </div>
+
+              <div className="bet-analyzer-total">
+                <span>TOTAL STAKE (SINGLE)</span>
+                <strong>
+                  ${betAnalyzerRows
+                    .reduce((sum: number, row: any) => sum + Number(row.total_stake || 0), 0)
+                    .toFixed(2)}
+                </strong>
+              </div>
+            </>
+          )}
+        </div>
+      ) : null}
+    </section>
+
+    <section className="admin-panel-card bet-analyzer-section">
+      <button
+        type="button"
+        className={`bet-analyzer-accordion ${betAnalyzerOpenPanel === "PATTI" ? "open" : ""}`}
+        onClick={() => {
+          setBetAnalyzerOpenPanel("PATTI");
+          const session = getBetAnalyzerSession();
+          if (session) void loadBetAnalyzerModule("PATTI", session);
+        }}
+      >
+        <span>
+          <b>PATTI ANALYZER</b>
+          <small>Analyze Single Patti, Double Patti, Triple Patti betting activity.</small>
+        </span>
+        <strong>{betAnalyzerOpenPanel === "PATTI" ? "⌃" : "⌄"}</strong>
+      </button>
+
+      {betAnalyzerOpenPanel === "PATTI" ? (
+        <div className="bet-analyzer-content">
+          {betAnalyzerLoading ? (
+            <div className="admin-empty">LOADING PATTI ANALYSIS...</div>
+          ) : betAnalyzerRows.length === 0 ? (
+            <div className="admin-empty">
+              No active Patti bets are available for this session.
+            </div>
+          ) : (
+            <>
+              <div className="bet-analyzer-grid">
+                {betAnalyzerRows.map((row: any) => (
+                  <div className="bet-analyzer-number-card has-bet" key={`patti-${row.played_number}`}>
+                    <b>{row.played_number}</b>
+                    <strong>${Number(row.total_stake || 0).toFixed(2)}</strong>
+                    <small>Total Stake: {Number(row.total_stake || 0).toFixed(2)}</small>
+                  </div>
+                ))}
+              </div>
+
+              <div className="bet-analyzer-total">
+                <span>TOTAL STAKE (PATTI)</span>
+                <strong>
+                  ${betAnalyzerRows
+                    .reduce((sum: number, row: any) => sum + Number(row.total_stake || 0), 0)
+                    .toFixed(2)}
+                </strong>
+              </div>
+            </>
+          )}
+        </div>
+      ) : null}
+    </section>
+
+    <section className="admin-panel-card bet-analyzer-section">
+      <button
+        type="button"
+        className={`bet-analyzer-accordion ${betAnalyzerOpenPanel === "JODI" ? "open" : ""}`}
+        onClick={() => {
+          setBetAnalyzerOpenPanel("JODI");
+          const session = getBetAnalyzerSession();
+          if (session) void loadJodiAnalyzerModule(session);
+        }}
+      >
+        <span>
+          <b>JODI ANALYZER</b>
+          <small>Analyze Jodi betting activity.</small>
+        </span>
+        <strong>{betAnalyzerOpenPanel === "JODI" ? "⌃" : "⌄"}</strong>
+      </button>
+
+      {betAnalyzerOpenPanel === "JODI" ? (
+        <div className="bet-analyzer-content">
+          {betAnalyzerLoading ? (
+            <div className="admin-empty">LOADING JODI ANALYSIS...</div>
+          ) : betAnalyzerRows.length === 0 ? (
+            <div className="admin-empty">
+              No active Jodi bets are available for this session.
+            </div>
+          ) : (
+            <>
+              {(() => {
+                const session = getBetAnalyzerSession();
+                const previousSession = session?.jodi_previous_session || getJodiPreviousSession(session, betAnalyzerSelectorSessions);
+                const nextSession = session?.jodi_next_session || getJodiNextSession(session, betAnalyzerSelectorSessions);
+                const gameName = String(session?.game_name || "").trim().toLowerCase();
+                const isMainBazar = gameName === "main bazar";
+
+                const previousRows = betAnalyzerRows.filter((row: any) => row.section === "PREVIOUS");
+                const forwardRows = betAnalyzerRows.filter((row: any) => row.section === "FORWARD");
+
+                const previousTitle = isMainBazar
+                  ? "CARRY FORWARD FROM OPEN"
+                  : previousSession
+                    ? `PREVIOUS / CARRY FROM BAZI ${previousSession.bazi_no}`
+                    : "PREVIOUS / CARRY";
+
+                const forwardTitle = isMainBazar
+                  ? "NEW / FORWARD TO CLOSE"
+                  : nextSession
+                    ? `NEW / FORWARD TO BAZI ${nextSession.bazi_no}`
+                    : "NEW / FORWARD";
+
+                const totalJodiStake = betAnalyzerRows.reduce(
+                  (sum: number, row: any) => sum + Number(row.total_stake || 0),
+                  0
+                );
+
+                return (
+                  <>
+                    {previousRows.length > 0 ? (
+                      <div className="bet-analyzer-subsection">
+                        <div className="bet-analyzer-subtitle">{previousTitle}</div>
+                        <div className="bet-analyzer-grid">
+                          {previousRows.map((row: any) => (
+                            <div className="bet-analyzer-number-card has-bet" key={`previous-${row.played_number}`}>
+                              <b>{row.played_number}</b>
+                              <strong>${Number(row.total_stake || 0).toFixed(2)}</strong>
+                              <small>Total Stake: {Number(row.total_stake || 0).toFixed(2)}</small>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {forwardRows.length > 0 ? (
+                      <div className="bet-analyzer-subsection">
+                        <div className="bet-analyzer-subtitle">{forwardTitle}</div>
+                        <div className="bet-analyzer-grid">
+                          {forwardRows.map((row: any) => (
+                            <div className="bet-analyzer-number-card has-bet" key={`forward-${row.played_number}`}>
+                              <b>{row.played_number}</b>
+                              <strong>${Number(row.total_stake || 0).toFixed(2)}</strong>
+                              <small>Total Stake: {Number(row.total_stake || 0).toFixed(2)}</small>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="bet-analyzer-total">
+                      <span>TOTAL STAKE (JODI)</span>
+                      <strong>${totalJodiStake.toFixed(2)}</strong>
+                    </div>
+                  </>
+                );
+              })()}
+            </>
+          )}
+        </div>
+      ) : null}
+    </section>
+  </>
+) : (
+  <section className="admin-panel-card">
+    <div className="admin-empty">
+      Select Game, Bazi and Date, then press ANALYZE to view the selected session.
+    </div>
+  </section>
+)}
 </>
-  ) : adminModule === "SETTLEMENT" ? (
+) : adminModule === "SETTLEMENT" ? (
 <>
 <section className="admin-panel-card">
   <div className="admin-panel-title">RESULT-DECLARED SESSIONS</div>
@@ -13607,7 +13543,7 @@ color: #111;
 /* ADMIN PANEL */
 .admin-shell{min-height:100vh;background:radial-gradient(circle at 50% -10%,rgba(255,195,0,.10),transparent 34%),linear-gradient(180deg,#05070a 0%,#090c12 60%,#030405 100%);color:#fff}
 .admin-header{width:100%;padding:14px 12px;border-bottom:1px solid rgba(255,195,0,.24);background:linear-gradient(180deg,#0d1118,#080b10);display:flex;align-items:center;justify-content:space-between;gap:10px}
-.admin-brand{font-size:18px;font-weight:900;letter-spacing:1px;color:#ffc928}.admin-subtitle{margin-top:3px;font-size:7px;color:#9a9fa8;letter-spacing:.8px;font-weight:800}.admin-header-actions{display:flex;align-items:center;gap:6px}.admin-role-badge{padding:7px 8px;border-radius:7px;border:1px solid rgba(255,195,0,.45);color:#ffd33c;background:#11151c;font-size:7px;font-weight:900}.admin-logout-btn{height:31px;padding:0 9px;border-radius:7px;border:1px solid rgba(255,70,70,.8);background:#b51f2a;color:#fff;font-size:7px;font-weight:900}.admin-main{width:100%;max-width:720px;margin:0 auto;padding:12px}.admin-welcome-card,.admin-panel-card,.admin-supply-card{border:1px solid rgba(255,195,0,.18);background:linear-gradient(145deg,rgba(20,24,31,.96),rgba(8,11,16,.96));border-radius:13px;padding:14px;margin-bottom:10px}.admin-welcome-card{display:flex;justify-content:space-between;align-items:center;gap:10px}.admin-section-kicker{font-size:7px;color:#b99322;font-weight:900;letter-spacing:1.2px}.admin-welcome-card h1,.admin-supply-card h2{margin:5px 0 4px;font-size:18px;color:#fff}.admin-welcome-card p,.admin-supply-card p{margin:0;color:#8e949e;font-size:8px;line-height:1.55}.admin-refresh-btn{min-width:72px;height:32px;border-radius:7px;border:1px solid rgba(255,195,0,.55);background:#12161d;color:#ffd33c;font-size:7px;font-weight:900}.admin-success{margin-bottom:10px;padding:9px;border-radius:8px;border:1px solid rgba(50,220,120,.35);background:rgba(20,120,65,.16);color:#55ee9a;font-size:8px}.admin-available-value{color:#45ed8b !important}.admin-exposure-value{color:#ff6b6b !important}..admin-error{margin-bottom:10px;padding:9px;border-radius:8px;border:1px solid rgba(255,70,70,.35);background:rgba(130,20,25,.18);color:#ff8a8a;font-size:8px}.admin-stat-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:10px}.admin-account-management{border:1px solid rgba(255,195,0,.18);background:linear-gradient(145deg,rgba(20,24,31,.96),rgba(8,11,16,.96));border-radius:13px;padding:14px;margin-bottom:10px}.admin-account-header{margin-bottom:10px}.admin-account-header h2{margin:5px 0 4px;font-size:15px;color:#fff}.admin-account-header p{margin:0;color:#8e949e;font-size:8px;line-height:1.55}.admin-account-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.admin-account-card{min-height:72px;padding:10px;border-radius:9px;border:1px solid #1d232c;background:#0a0d12;display:flex;flex-direction:column;justify-content:space-between}.admin-account-card.primary{border-color:rgba(255,195,0,.34)}.admin-account-card.highlight{border-color:rgba(255,195,0,.28);background:linear-gradient(145deg,#11140e,#0a0d12)}.admin-account-card span{font-size:6px;color:#777;font-weight:900;letter-spacing:.7px}.admin-account-card strong{font-size:14px;color:#ffd13b;word-break:break-word;margin:4px 0}.admin-account-card small{font-size:6px;color:#666;line-height:1.35}.admin-account-detail-panel{padding:14px}.admin-account-detail-intro{margin:5px 0 12px;color:#8e949e;font-size:8px;line-height:1.55}.admin-account-grid-detail{grid-template-columns:repeat(2,minmax(0,1fr))}.admin-stat-card{min-height:78px;padding:11px;border-radius:11px;border:1px solid rgba(255,195,0,.14);background:#0d1117;display:flex;flex-direction:column;justify-content:space-between}.admin-stat-card span{font-size:6px;color:#777;font-weight:900;letter-spacing:.8px}.admin-stat-card strong{font-size:16px;color:#ffd13b;word-break:break-word}.admin-module-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:10px}.admin-module-card{min-height:68px;text-align:left;padding:10px;border-radius:10px;border:1px solid #242b35;background:#0d1117;color:#fff}.admin-module-card.active{border-color:rgba(255,195,0,.5)}.admin-module-card b{display:block;color:#ffd13b;font-size:9px;margin-bottom:4px}.admin-module-card small{display:block;color:#777;font-size:7px}.admin-form{display:flex;flex-direction:column;gap:10px}.admin-form-field{display:flex;flex-direction:column;gap:5px}.admin-form-field label{font-size:7px;color:#777;font-weight:900;letter-spacing:.8px}.admin-form-input{width:100%;height:40px;padding:0 11px;border-radius:8px;border:1px solid #252c36;background:#090c11;color:#fff;font-size:10px;outline:none}.admin-form-input:focus{border-color:rgba(255,195,0,.55)}.admin-form-input::placeholder{color:#555}.admin-form-note{padding:9px;border-radius:7px;background:#0a0d12;color:#777;font-size:7px;line-height:1.5}.admin-create-btn{width:100%;height:40px;border-radius:8px;border:1px solid rgba(255,195,0,.55);background:#15130b;color:#ffd13b;font-size:8px;font-weight:900;cursor:pointer}.admin-create-btn:disabled{opacity:.55;cursor:not-allowed}.admin-create-btn:active{transform:scale(.99)}.admin-panel-title{font-size:10px;color:#ffd13b;font-weight:900;margin-bottom:9px}.admin-panel-title-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px}.admin-empty{padding:13px;border-radius:8px;background:#0a0d12;color:#777;text-align:center;font-size:8px}.admin-agent-list{display:flex;flex-direction:column;gap:6px}.admin-agent-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px;border-radius:8px;background:#0a0d12;border:1px solid #1d232c}.admin-agent-row b{display:block;color:#fff;font-size:8px}.admin-agent-row small{display:block;color:#666;font-size:6px;margin-top:3px;word-break:break-all}.admin-status{padding:5px 6px;border-radius:6px;background:#301318;color:#ff8a8a;font-size:6px;font-weight:900}.admin-status.active{background:rgba(0,150,70,.12);color:#55ee9a}.admin-wallet-lookup-card{border-color:rgba(255,195,0,.22)}
+.admin-brand{font-size:18px;font-weight:900;letter-spacing:1px;color:#ffc928}.admin-subtitle{margin-top:3px;font-size:7px;color:#9a9fa8;letter-spacing:.8px;font-weight:800}.admin-header-actions{display:flex;align-items:center;gap:6px}.admin-role-badge{padding:7px 8px;border-radius:7px;border:1px solid rgba(255,195,0,.45);color:#ffd33c;background:#11151c;font-size:7px;font-weight:900}.admin-logout-btn{height:31px;padding:0 9px;border-radius:7px;border:1px solid rgba(255,70,70,.8);background:#b51f2a;color:#fff;font-size:7px;font-weight:900}.admin-main{width:100%;max-width:720px;margin:0 auto;padding:12px}.admin-welcome-card,.admin-panel-card,.admin-supply-card{border:1px solid rgba(255,195,0,.18);background:linear-gradient(145deg,rgba(20,24,31,.96),rgba(8,11,16,.96));border-radius:13px;padding:14px;margin-bottom:10px}.admin-welcome-card{display:flex;justify-content:space-between;align-items:center;gap:10px}.admin-section-kicker{font-size:7px;color:#b99322;font-weight:900;letter-spacing:1.2px}.admin-welcome-card h1,.admin-supply-card h2{margin:5px 0 4px;font-size:18px;color:#fff}.admin-welcome-card p,.admin-supply-card p{margin:0;color:#8e949e;font-size:8px;line-height:1.55}.admin-refresh-btn{min-width:72px;height:32px;border-radius:7px;border:1px solid rgba(255,195,0,.55);background:#12161d;color:#ffd33c;font-size:7px;font-weight:900}.admin-success{margin-bottom:10px;padding:9px;border-radius:8px;border:1px solid rgba(50,220,120,.35);background:rgba(20,120,65,.16);color:#55ee9a;font-size:8px}.admin-available-value{color:#45ed8b !important}.admin-exposure-value{color:#ff6b6b !important}..admin-error{margin-bottom:10px;padding:9px;border-radius:8px;border:1px solid rgba(255,70,70,.35);background:rgba(130,20,25,.18);color:#ff8a8a;font-size:8px}.admin-stat-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:10px}.admin-account-management{border:1px solid rgba(255,195,0,.18);background:linear-gradient(145deg,rgba(20,24,31,.96),rgba(8,11,16,.96));border-radius:13px;padding:14px;margin-bottom:10px}.admin-account-header{margin-bottom:10px}.admin-account-header h2{margin:5px 0 4px;font-size:15px;color:#fff}.admin-account-header p{margin:0;color:#8e949e;font-size:8px;line-height:1.55}.admin-account-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.admin-account-card{min-height:72px;padding:10px;border-radius:9px;border:1px solid #1d232c;background:#0a0d12;display:flex;flex-direction:column;justify-content:space-between}.admin-account-card.primary{border-color:rgba(255,195,0,.34)}.admin-account-card.highlight{border-color:rgba(255,195,0,.28);background:linear-gradient(145deg,#11140e,#0a0d12)}.admin-account-card span{font-size:6px;color:#777;font-weight:900;letter-spacing:.7px}.admin-account-card strong{font-size:14px;color:#ffd13b;word-break:break-word;margin:4px 0}.admin-account-card small{font-size:6px;color:#666;line-height:1.35}.admin-account-detail-panel{padding:14px}.admin-account-detail-intro{margin:5px 0 12px;color:#8e949e;font-size:8px;line-height:1.55}.admin-account-grid-detail{grid-template-columns:repeat(2,minmax(0,1fr))}.admin-stat-card{min-height:78px;padding:11px;border-radius:11px;border:1px solid rgba(255,195,0,.14);background:#0d1117;display:flex;flex-direction:column;justify-content:space-between}.admin-stat-card span{font-size:6px;color:#777;font-weight:900;letter-spacing:.8px}.admin-stat-card strong{font-size:16px;color:#ffd13b;word-break:break-word}.admin-module-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:10px}.admin-module-card{min-height:68px;text-align:left;padding:10px;border-radius:10px;border:1px solid #242b35;background:#0d1117;color:#fff}.admin-module-card.active{border-color:rgba(255,195,0,.5)}.admin-module-card b{display:block;color:#ffd13b;font-size:9px;margin-bottom:4px}.admin-module-card small{display:block;color:#777;font-size:7px}.admin-form{display:flex;flex-direction:column;gap:10px}.admin-form-field{display:flex;flex-direction:column;gap:5px}.admin-form-field label{font-size:7px;color:#777;font-weight:900;letter-spacing:.8px}.admin-form-input{width:100%;height:40px;padding:0 11px;border-radius:8px;border:1px solid #252c36;background:#090c11;color:#fff;font-size:10px;outline:none}.admin-form-input:focus{border-color:rgba(255,195,0,.55)}.admin-form-input::placeholder{color:#555}.admin-form-note{padding:9px;border-radius:7px;background:#0a0d12;color:#777;font-size:7px;line-height:1.5}.admin-create-btn{width:100%;height:40px;border-radius:8px;border:1px solid rgba(255,195,0,.55);background:#15130b;color:#ffd13b;font-size:8px;font-weight:900;cursor:pointer}.admin-create-btn:disabled{opacity:.55;cursor:not-allowed}.admin-create-btn:active{transform:scale(.99)}.admin-panel-title{font-size:10px;color:#ffd13b;font-weight:900;margin-bottom:9px}.admin-panel-title-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px}.admin-empty{padding:13px;border-radius:8px;background:#0a0d12;color:#777;text-align:center;font-size:8px}.admin-agent-list{display:flex;flex-direction:column;gap:6px}.admin-agent-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px;border-radius:8px;background:#0a0d12;border:1px solid #1d232c}.admin-agent-row b{display:block;color:#fff;font-size:8px}.admin-agent-row small{display:block;color:#666;font-size:6px;margin-top:3px;word-break:break-all}.admin-status{padding:5px 6px;border-radius:6px;background:#301318;color:#ff8a8a;font-size:6px;font-weight:900}.admin-status.active{background:rgba(0,150,70,.12);color:#55ee9a}.bet-analyzer-selector-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;align-items:end;margin-top:10px}.bet-analyzer-analyze-btn{height:40px;background:#ffd21f;color:#090b10;border-color:#ffd21f;font-size:9px}.bet-analyzer-session-header{padding:12px;border:1px solid rgba(255,195,0,.55);border-left:4px solid #ffd13b;border-radius:10px;background:linear-gradient(145deg,rgba(20,24,31,.96),rgba(8,11,16,.96))}.bet-analyzer-session-header b{display:block;color:#ffd13b;font-size:14px}.bet-analyzer-session-header small{display:block;color:#8e949e;font-size:8px;margin-top:5px}.bet-analyzer-section{padding:0;overflow:hidden}.bet-analyzer-accordion{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px;background:transparent;border:0;color:#fff;text-align:left;cursor:pointer}.bet-analyzer-accordion span{display:block;min-width:0}.bet-analyzer-accordion b{display:block;color:#ffd13b;font-size:12px}.bet-analyzer-accordion small{display:block;color:#8e949e;font-size:8px;line-height:1.45;margin-top:4px}.bet-analyzer-accordion strong{color:#ffd13b;font-size:18px;flex:0 0 auto}.bet-analyzer-accordion.open{border-bottom:1px solid rgba(255,195,0,.18)}.bet-analyzer-content{padding:12px}.bet-analyzer-rate-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 11px;margin-bottom:9px;border:1px solid rgba(255,195,0,.5);border-radius:8px;background:#0a0d12;color:#fff;font-size:9px}.bet-analyzer-rate-row strong{color:#ffd13b;font-size:18px}.bet-analyzer-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}.bet-analyzer-number-card{min-width:0;min-height:92px;padding:10px 7px;border-radius:9px;background:#0a0d12;border:1px solid #252c36;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}.bet-analyzer-number-card.has-bet{border-color:#22d96b;background:linear-gradient(145deg,rgba(0,100,45,.22),rgba(10,13,18,.96))}.bet-analyzer-number-card.no-bet{border-color:rgba(255,195,0,.42)}.bet-analyzer-number-card b{display:block;color:#fff;font-size:18px;line-height:1.1}.bet-analyzer-number-card strong{display:block;color:#45ed8b;font-size:12px;margin-top:7px;white-space:nowrap}.bet-analyzer-number-card.no-bet strong{color:#aeb4c8}.bet-analyzer-number-card small{display:block;color:#c9cdd6;font-size:7px;margin-top:6px;line-height:1.25}.bet-analyzer-total{margin-top:9px;padding:11px;border:1px solid rgba(255,195,0,.55);border-radius:9px;background:linear-gradient(145deg,rgba(35,30,8,.75),rgba(10,13,18,.96));text-align:center}.bet-analyzer-total span{display:block;color:#fff;font-size:8px;letter-spacing:.5px}.bet-analyzer-total strong{display:block;color:#ffd13b;font-size:22px;margin-top:4px}.bet-analyzer-subsection{margin-bottom:12px}.bet-analyzer-subtitle{color:#ffd13b;font-size:10px;font-weight:900;margin-bottom:7px;padding:7px 8px;border-left:3px solid #ffd13b;background:#0a0d12;border-radius:6px}@media(max-width:700px){.bet-analyzer-selector-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.bet-analyzer-analyze-btn{grid-column:span 2}.bet-analyzer-grid{grid-template-columns:repeat(5,minmax(0,1fr));gap:5px}.bet-analyzer-number-card{min-height:78px;padding:8px 3px}.bet-analyzer-number-card b{font-size:14px}.bet-analyzer-number-card strong{font-size:10px;margin-top:5px}.bet-analyzer-number-card small{font-size:6px;margin-top:4px}.bet-analyzer-total strong{font-size:19px}}.admin-wallet-lookup-card{border-color:rgba(255,195,0,.22)}
 .admin-wallet-lookup-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px;align-items:center}
 .admin-wallet-lookup-row .admin-small-action{height:40px;min-width:68px}
 .admin-wallet-lookup-results{display:flex;flex-direction:column;gap:6px;margin-top:8px}
@@ -15891,5 +15827,70 @@ onChange={(event) => setConfirmPassword(event.target.value)}
 
 
 
-export default App;
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+export default App;
