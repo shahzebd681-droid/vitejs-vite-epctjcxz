@@ -6692,7 +6692,7 @@ setAdminAccountStats({
   totalSupply: Number(supply?.available_supply || 0),
   superAdminAvailable,
   totalSpendable,
-  distributed: Number(mainSupply?.network_unburned || 0),
+  distributed: networkAvailable + networkExposure,
   agentAvailable,
   agentExposure,
   customerAvailable,
