@@ -726,6 +726,9 @@ status: string;
 result: string;
 
 
+wonAmount: number;
+
+
 };
 
 
@@ -746,7 +749,7 @@ time: string;
 type: "CREDIT" | "DEBIT";
 
 
-transaction: string;
+performedBy: "SUPER ADMIN" | "AGENT ADMIN";
 
 
 amount: number;
@@ -2385,11 +2388,12 @@ const loadCustomerHistoryAndStatement = async (customerId: string, walletId: str
     const { data: betItems, error: betItemsError } = betIds.length
       ? await supabase
           .from("bet_items")
-          .select("id, bet_id, session_id, bet_type, played_number, stake, rate, status, created_at")
+          .select("id, bet_id, session_id, bet_type, played_number, stake, rate, potential_win, status, created_at")
           .in("bet_id", betIds)
           .order("created_at", { ascending: false })
       : { data: [], error: null };
     if (betItemsError) throw betItemsError;
+
 
     const { data: sessions, error: sessionsError } = sessionIds.length
       ? await supabase
@@ -2453,6 +2457,10 @@ const loadCustomerHistoryAndStatement = async (customerId: string, walletId: str
          rate: Number(item.rate || 0),
         status: normalizeBetStatus(item.status, bet?.status || "ACTIVE"),
         result: result ? `${result.patti} - ${result.single_digit}` : "-",
+        wonAmount:
+          normalizeBetStatus(item.status, bet?.status || "ACTIVE") === "WON"
+            ? Number(item.potential_win || 0)
+            : 0,
       };
     });
 
@@ -2462,42 +2470,28 @@ const loadCustomerHistoryAndStatement = async (customerId: string, walletId: str
       .from("wallet_transactions")
       .select("id, transaction_type, reference_type, amount, available_after, created_at")
       .eq("wallet_id", walletId)
+      .in("reference_type", [
+        "SUPER_ADMIN_ONLINE_CUSTOMER_TRANSFER",
+        "AGENT_CUSTOMER_TRANSFER",
+      ])
+      .in("transaction_type", ["DEPOSIT", "WITHDRAWAL"])
       .gte("created_at", cutoffIso)
       .order("created_at", { ascending: false });
     if (transactionsError) throw transactionsError;
 
-    const creditTypes = new Set(["DEPOSIT", "REFILL", "WIN", "REFUND"]);
     const statementRows: StatementItem[] = (transactions || []).map((tx, index) => {
       const transactionType = String(tx.transaction_type || "").toUpperCase();
       const referenceType = String(tx.reference_type || "").toUpperCase();
-
-      let transaction = "BETTING";
-      if (transactionType === "WIN") {
-        transaction = "BETTING WIN SETTLEMENT";
-      } else if (transactionType === "REFUND") {
-        transaction = "BETTING REFUND";
-      } else if (transactionType === "REFILL") {
-        transaction = "REFILL COINS";
-      } else if (
-        transactionType === "DEPOSIT" &&
-        referenceType === "SUPER_ADMIN_ONLINE_CUSTOMER_TRANSFER"
-      ) {
-        transaction = "SUPER ADMIN REFILL";
-      } else if (
-        transactionType === "DEPOSIT" &&
-        referenceType === "AGENT_CUSTOMER_TRANSFER"
-      ) {
-        transaction = "AGENT REFILL";
-      } else if (transactionType === "WITHDRAWAL") {
-        transaction = "WITHDRAWAL";
-      }
 
       return {
         id: index + 1,
         date: formatDate(tx.created_at),
         time: formatTime(tx.created_at),
-        type: creditTypes.has(transactionType) ? "CREDIT" : "DEBIT",
-        transaction,
+        type: transactionType === "DEPOSIT" ? "CREDIT" : "DEBIT",
+        performedBy:
+          referenceType === "SUPER_ADMIN_ONLINE_CUSTOMER_TRANSFER"
+            ? "SUPER ADMIN"
+            : "AGENT ADMIN",
         amount: Number(tx.amount || 0),
         balance: Number(tx.available_after || 0),
       };
@@ -3244,6 +3238,7 @@ amount,
 rate: Number(betRates[betType] || 0),
 status: "PENDING",
 result: "-",
+wonAmount: 0,
 })
 );
 
@@ -3254,20 +3249,6 @@ setBetHistory(
 ]
 );
 
-setStatement(
-(previous) => [
-{
-id: Date.now(),
-date,
-time,
-type: "DEBIT",
-transaction: "BETTING",
-amount: total,
-balance: newBalance,
-},
-...previous,
-]
-);
 
 alert(
 `Bet placed successfully.\n\n` +
@@ -5545,7 +5526,7 @@ historyFilter === "All"
 : betHistory.filter((bet) => {
 if (historyFilter === "Main Bazar") return bet.game === "Main Bazar";
 if (historyFilter === "Kolkata") return bet.game === "Kolkata Fatafat";
-if (historyFilter === "Dus ka Dum") return bet.game === "Dus ka Dum";
+if (historyFilter === "Dus Ka Dum") return bet.game === "Dus Ka Dum";
 return true;
 });
 
@@ -5558,8 +5539,7 @@ const pagedHistory = filtered.slice(historyStart, historyStart + historyPageSize
 return (
 <>
 {renderCustomerHeader()}
-<main className="customer-main">
-{renderBalanceBar()}
+<main className="customer-main customer-history-page">
 {renderCustomerNav()}
 
 <div className="page-heading">
@@ -5568,7 +5548,7 @@ return (
 </div>
 
 <div className="history-tabs">
-{["All", "Main Bazar", "Kolkata", "Dus ka Dum"].map((filter) => (
+{["All", "Main Bazar", "Kolkata", "Dus Ka Dum"].map((filter) => (
 <button
 key={filter}
 className={historyFilter === filter ? "history-tab active" : "history-tab"}
@@ -5601,13 +5581,13 @@ GO TO GAMES
 <th>Game</th>
 <th>Session</th>
 <th>Bazi</th>
-<th>Market</th>
 <th>Bet Type</th>
 <th>Number / Patti / Jodi</th>
 <th>Amount</th>
 <th>Rate</th>
 <th>Result</th>
 <th>Status</th>
+<th>Won Amount</th>
 </tr>
 </thead>
 <tbody>
@@ -5618,15 +5598,15 @@ GO TO GAMES
 <div>{bet.time}</div>
 </td>
 <td className="history-table-game">{bet.game}</td>
-<td>{bet.sessionCode}</td>
-<td>{bet.bazi}</td>
-<td>{bet.market}</td>
+<td className="history-table-session">{bet.sessionCode === "-" ? "-" : bet.sessionCode.slice(-10)}</td>
+<td className="history-table-bazi">{bet.bazi}</td>
 <td className="history-table-bet-type">{bet.type}</td>
 <td className="history-table-number">{bet.number}</td>
 <td className="history-table-amount">${bet.amount.toFixed(2)}</td>
 <td className="history-table-rate">{bet.rate > 0 ? `${bet.rate}X` : "-"}</td>
-<td>{bet.result}</td>
+<td className="history-table-result">{bet.result}</td>
 <td><span className={`history-table-status history-table-status-${String(bet.status || "").toLowerCase()}`}>{bet.status}</span></td>
+<td className="history-table-won-amount">{bet.status === "WON" ? `$${bet.wonAmount.toFixed(2)}` : "-"}</td>
 </tr>
 ))}
 </tbody>
@@ -5910,8 +5890,7 @@ const renderStatementPage = () => {
 <>
 {renderCustomerHeader()}
 
-<main className="customer-main">
-{renderBalanceBar()}
+<main className="customer-main customer-statement-page">
 
 <div className="betting-topbar">
 <button
@@ -5949,25 +5928,26 @@ debits will appear here.
 <thead>
 <tr>
 <th className="statement-col-datetime">Date &amp; Time</th>
+<th className="statement-col-by">Transaction By</th>
 <th className="statement-col-type">Type</th>
-<th className="statement-col-transaction">Transaction</th>
 <th className="statement-col-amount">Amount</th>
-<th className="statement-col-balance">Balance</th>
+<th className="statement-col-balance">Available Balance</th>
 </tr>
 </thead>
 <tbody>
 {pagedStatement.map((item) => (
 <tr key={item.id}>
 <td className="statement-table-datetime">
-{item.date} • {item.time}
+<div>{item.date}</div>
+<div>{item.time}</div>
+</td>
+<td className="statement-table-by">
+{item.performedBy}
 </td>
 <td className="statement-table-type-cell">
 <span className={`statement-table-type ${item.type === "CREDIT" ? "credit" : "debit"}`}>
 {item.type}
 </span>
-</td>
-<td className="statement-table-transaction">
-{item.transaction}
 </td>
 <td className="statement-table-amount">
 <span className={item.type === "CREDIT" ? "statement-table-credit" : "statement-table-debit"}>
@@ -15740,6 +15720,199 @@ color: #111;
     overflow-wrap:anywhere;
   }
 }
+
+
+
+/* =========================================================
+   CUSTOMER HISTORY + STATEMENT — CONFIRMED MOBILE AUDIT UI
+   ========================================================= */
+.customer-history-page .history-table-scroll,
+.customer-statement-page .statement-table-scroll{
+  width:100%;
+  overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;
+  border:1px solid #d7dbe0;
+  border-radius:9px;
+  background:#fff;
+}
+
+.customer-history-page .history-table,
+.customer-statement-page .statement-table{
+  width:100%;
+  min-width:0;
+  table-layout:fixed;
+  border-collapse:collapse;
+  background:#fff;
+  color:#111827;
+}
+
+.customer-history-page .history-table th,
+.customer-history-page .history-table td,
+.customer-statement-page .statement-table th,
+.customer-statement-page .statement-table td{
+  border-bottom:1px solid #e1e5e9;
+  overflow-wrap:anywhere;
+}
+
+.customer-history-page .history-table th,
+.customer-statement-page .statement-table th{
+  padding:8px 4px;
+  background:#f2f4f6;
+  color:#111827;
+  font-size:7px;
+  font-weight:900;
+  line-height:1.25;
+  white-space:normal;
+}
+
+.customer-history-page .history-table td,
+.customer-statement-page .statement-table td{
+  padding:8px 4px;
+  background:#fff;
+  color:#111827;
+  font-size:7px;
+  font-weight:700;
+  line-height:1.35;
+  white-space:normal;
+}
+
+.customer-history-page .history-table th:nth-child(1),
+.customer-history-page .history-table td:nth-child(1){width:14%;}
+.customer-history-page .history-table th:nth-child(2),
+.customer-history-page .history-table td:nth-child(2){width:10%;}
+.customer-history-page .history-table th:nth-child(3),
+.customer-history-page .history-table td:nth-child(3){width:14%;}
+.customer-history-page .history-table th:nth-child(4),
+.customer-history-page .history-table td:nth-child(4){width:6%;}
+.customer-history-page .history-table th:nth-child(5),
+.customer-history-page .history-table td:nth-child(5){width:10%;}
+.customer-history-page .history-table th:nth-child(6),
+.customer-history-page .history-table td:nth-child(6){width:13%;}
+.customer-history-page .history-table th:nth-child(7),
+.customer-history-page .history-table td:nth-child(7){width:8%;}
+.customer-history-page .history-table th:nth-child(8),
+.customer-history-page .history-table td:nth-child(8){width:6%;}
+.customer-history-page .history-table th:nth-child(9),
+.customer-history-page .history-table td:nth-child(9){width:7%;}
+.customer-history-page .history-table th:nth-child(10),
+.customer-history-page .history-table td:nth-child(10){width:6%;}
+.customer-history-page .history-table th:nth-child(11),
+.customer-history-page .history-table td:nth-child(11){width:6%;}
+
+.customer-history-page .history-table-datetime{
+  color:#111827 !important;
+  font-weight:800 !important;
+  white-space:normal !important;
+}
+.customer-history-page .history-table-game,
+.customer-history-page .history-table-bet-type{
+  color:#8a6700 !important;
+  font-weight:900 !important;
+}
+.customer-history-page .history-table-session,
+.customer-history-page .history-table-bazi,
+.customer-history-page .history-table-result{
+  color:#111827 !important;
+}
+.customer-history-page .history-table-number,
+.customer-history-page .history-table-amount,
+.customer-history-page .history-table-rate{
+  color:#7a5b00 !important;
+  font-weight:900 !important;
+}
+.customer-history-page .history-table-won-amount{
+  color:#16834b !important;
+  font-weight:900 !important;
+}
+.customer-history-page .history-table-status{
+  padding:3px 4px;
+  border-radius:8px;
+  font-size:6px;
+  font-weight:900;
+  white-space:nowrap;
+}
+.customer-history-page .history-table-status-pending{
+  background:#fff7d6;
+  border:1px solid #ead37b;
+  color:#8a6800;
+}
+.customer-history-page .history-table-status-won{
+  background:#e8f8ef;
+  border:1px solid #a9dfbf;
+  color:#16834b;
+}
+.customer-history-page .history-table-status-loss,
+.customer-history-page .history-table-status-lost{
+  background:#fdecec;
+  border:1px solid #efb5b5;
+  color:#c62828;
+}
+
+.customer-statement-page .statement-table th:nth-child(1),
+.customer-statement-page .statement-table td:nth-child(1){width:24%;}
+.customer-statement-page .statement-table th:nth-child(2),
+.customer-statement-page .statement-table td:nth-child(2){width:20%;}
+.customer-statement-page .statement-table th:nth-child(3),
+.customer-statement-page .statement-table td:nth-child(3){width:16%;}
+.customer-statement-page .statement-table th:nth-child(4),
+.customer-statement-page .statement-table td:nth-child(4){width:20%;}
+.customer-statement-page .statement-table th:nth-child(5),
+.customer-statement-page .statement-table td:nth-child(5){width:20%;}
+.customer-statement-page .statement-table-datetime{
+  width:auto;
+  text-align:left !important;
+  color:#111827 !important;
+  font-weight:800 !important;
+  white-space:normal !important;
+}
+.customer-statement-page .statement-table-by{
+  color:#111827 !important;
+  font-weight:900 !important;
+}
+.customer-statement-page .statement-table-type-cell{
+  width:auto;
+  text-align:center !important;
+}
+.customer-statement-page .statement-table-type.credit,
+.customer-statement-page .statement-table-credit{
+  color:#16834b !important;
+  font-weight:900 !important;
+}
+.customer-statement-page .statement-table-type.debit,
+.customer-statement-page .statement-table-debit{
+  color:#c62828 !important;
+  font-weight:900 !important;
+}
+.customer-statement-page .statement-table-amount,
+.customer-statement-page .statement-table-balance{
+  width:auto;
+  text-align:right !important;
+}
+.customer-statement-page .statement-table-balance{
+  color:#111827 !important;
+  font-weight:800 !important;
+}
+.customer-statement-page .statement-pagination-info,
+.customer-statement-page .statement-pagination-page,
+.customer-history-page .history-pagination-info,
+.customer-history-page .history-pagination-page{
+  color:#d7dde5;
+}
+
+@media (max-width:390px){
+  .customer-history-page .history-table th,
+  .customer-history-page .history-table td{
+    padding:7px 3px;
+    font-size:6.5px;
+  }
+  .customer-history-page .history-table-status{font-size:5.5px;padding:3px 3px;}
+  .customer-statement-page .statement-table th,
+  .customer-statement-page .statement-table td{
+    padding:8px 4px;
+    font-size:7px;
+  }
+}
+
 
 
 `}
