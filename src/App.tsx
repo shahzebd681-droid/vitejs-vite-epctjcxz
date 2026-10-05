@@ -889,34 +889,32 @@ const [contactTelegramLink, setContactTelegramLink] = useState("");
 const [contactLoading, setContactLoading] = useState(false);
 const [agentWalletAction, setAgentWalletAction] = useState<"DEPOSIT" | "WITHDRAW" | null>(null);
 const [auditLoading, setAuditLoading] = useState(false);
-const [auditRows, setAuditRows] = useState<Array<{
-  id: string;
-  audit_code: string;
-  action_type: string;
-  actor_id: string | null;
-  actor_role: string | null;
-  target_type: string | null;
-  target_id: string | null;
-  customer_id: string | null;
-  agent_id: string | null;
-  game_id: string | null;
-  session_id: string | null;
-  bet_id: string | null;
-  bet_item_id: string | null;
-  result_id: string | null;
-  settlement_id: string | null;
-  transaction_id: string | null;
-  reference_code: string | null;
-  amount: number | null;
-  old_value: any;
-  new_value: any;
-  reason: string | null;
-  ip_address: string | null;
-  user_agent: string | null;
+const [auditView, setAuditView] = useState<"HOME" | "TRANSACTION" | "SETTLEMENT">("HOME");
+const [auditTransactionRows, setAuditTransactionRows] = useState<Array<{
+  transaction_id: string;
+  transaction_code: string;
   created_at: string;
+  username: string | null;
+  counterparty_type: string | null;
+  direction: string;
+  amount: number;
+  super_admin_available_after: number;
 }>>([]);
-const [auditPage, setAuditPage] = useState(0);
-const [auditHasNext, setAuditHasNext] = useState(false);
+const [auditTransactionPage, setAuditTransactionPage] = useState(0);
+const [auditTransactionHasNext, setAuditTransactionHasNext] = useState(false);
+const [auditSettlementRows, setAuditSettlementRows] = useState<Array<{
+  settlement_id: string;
+  settlement_code: string;
+  settled_at: string;
+  game_name: string;
+  bazi_label: string;
+  result_text: string;
+  settlement_amount: number;
+  network_change: number;
+  network_unburned_available_after: number;
+}>>([]);
+const [auditSettlementPage, setAuditSettlementPage] = useState(0);
+const [auditSettlementHasNext, setAuditSettlementHasNext] = useState(false);
 const [reportsLoading, setReportsLoading] = useState(false);
 const [reportsRows, setReportsRows] = useState<Array<{
   id: string;
@@ -6791,34 +6789,70 @@ const transferSuperAdminOnlineCustomer = async (direction: "SUPER_ADMIN_TO_CUSTO
   }
 };
 
-const loadAuditModule = async (page = 0) => {
+const loadAuditTransactions = async (page = 0) => {
   if (auditLoading) return;
-
   setAuditLoading(true);
   setAdminError("");
-
   try {
     const pageSize = 25;
-    const fetchLimit = pageSize + 1;
-    const { data, error } = await supabase.rpc("get_super_admin_audit_logs", {
-      p_limit: fetchLimit,
+    const { data, error } = await supabase.rpc("get_super_admin_audit_transaction_rows", {
+      p_limit: pageSize + 1,
       p_offset: Math.max(0, page) * pageSize,
     });
-
     if (error) throw error;
-
     const rows = Array.isArray(data) ? data : [];
-    setAuditHasNext(rows.length > pageSize);
-    setAuditRows(rows.slice(0, pageSize).map((row: any) => ({
-      ...row,
-      amount: row.amount == null ? null : Number(row.amount),
+    setAuditTransactionHasNext(rows.length > pageSize);
+    setAuditTransactionRows(rows.slice(0, pageSize).map((row: any) => ({
+      transaction_id: row.transaction_id,
+      transaction_code: row.transaction_code,
+      created_at: row.created_at,
+      username: row.username ?? null,
+      counterparty_type: row.counterparty_type ?? null,
+      direction: row.direction || "-",
+      amount: Number(row.amount || 0),
+      super_admin_available_after: Number(row.super_admin_available_after || 0),
     })));
-    setAuditPage(Math.max(0, page));
+    setAuditTransactionPage(Math.max(0, page));
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to load Audit.";
-    setAuditRows([]);
-    setAuditHasNext(false);
-    setAdminError(message || "Unable to load Audit.");
+    const message = error instanceof Error ? error.message : "Unable to load Transaction Audit.";
+    setAuditTransactionRows([]);
+    setAuditTransactionHasNext(false);
+    setAdminError(message || "Unable to load Transaction Audit.");
+  } finally {
+    setAuditLoading(false);
+  }
+};
+
+const loadAuditSettlements = async (page = 0) => {
+  if (auditLoading) return;
+  setAuditLoading(true);
+  setAdminError("");
+  try {
+    const pageSize = 25;
+    const { data, error } = await supabase.rpc("get_super_admin_audit_settlement_rows", {
+      p_limit: pageSize + 1,
+      p_offset: Math.max(0, page) * pageSize,
+    });
+    if (error) throw error;
+    const rows = Array.isArray(data) ? data : [];
+    setAuditSettlementHasNext(rows.length > pageSize);
+    setAuditSettlementRows(rows.slice(0, pageSize).map((row: any) => ({
+      settlement_id: row.settlement_id,
+      settlement_code: row.settlement_code,
+      settled_at: row.settled_at,
+      game_name: row.game_name || "-",
+      bazi_label: row.bazi_label || "-",
+      result_text: row.result_text || "-",
+      settlement_amount: Number(row.settlement_amount || 0),
+      network_change: Number(row.network_change || 0),
+      network_unburned_available_after: Number(row.network_unburned_available_after || 0),
+    })));
+    setAuditSettlementPage(Math.max(0, page));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to load Settlement Audit.";
+    setAuditSettlementRows([]);
+    setAuditSettlementHasNext(false);
+    setAdminError(message || "Unable to load Settlement Audit.");
   } finally {
     setAuditLoading(false);
   }
@@ -7647,8 +7681,10 @@ onClick={() => {
     setAdminSuccess("");
   } else if (adminModule === "AUDIT") {
     setAdminModule("HOME");
-    setAuditRows([]);
-    setAuditHasNext(false);
+    setAuditTransactionRows([]);
+    setAuditSettlementRows([]);
+    setAuditTransactionHasNext(false);
+    setAuditSettlementHasNext(false);
     setAdminError("");
     setAdminSuccess("");
   } else if (adminModule === "BET_ANALYZER") {
@@ -7700,7 +7736,7 @@ disabled={adminModule === "HOME" && adminLoading}
 <button className="admin-module-card" onClick={()=>{setAdminModule("AGENT_ADMIN");setAdminError("");}}><b>Agent Admin</b><small>Create Agent Admin accounts</small></button>
 <button className="admin-module-card" onClick={()=>{setAdminModule("PASSWORD_RESET");setAdminPasswordResetTarget("");setAdminPasswordResetPassword("");setAdminError("");setAdminSuccess("");}}><b>Password Reset</b><small>Agent Admin + Online Customer password reset</small></button>
 <button className="admin-module-card" onClick={()=>{setAdminModule("RESULTS");setResultGameId("");setResultDate("");setResultSessionId("");setResultSingleDigit("");setResultPatti("");setResultCurrent(null);setAdminError("");setAdminSuccess("");void loadResultsModule();}}><b>Results</b><small>Declare game results</small></button>
-{[["Settlement","Settle market / Bazi"],["Bet Analyzer","Single / Patti / Jodi analysis"],["Reports","Betting activity reports"],["Audit","Traceable activity history"]].map(([title,sub])=><button key={title} className="admin-module-card" onClick={()=>{if(title==="Settlement"){setAdminModule("SETTLEMENT");setAdminError("");setAdminSuccess("");void loadSettlementModule();}else if(title==="Bet Analyzer"){setAdminModule("BET_ANALYZER");setBetAnalyzerView("ANALYZER");setBetAnalyzerRows([]);setBetAnalyzerOpenPanel("SINGLE");setBetAnalyzerDate(getLocalDateString());setBetAnalyzerGameId("");setBetAnalyzerBaziValue("");setBetAnalyzerSelectedSessionId("");setBetAnalyzerSelectedSession(null);setBetAnalyzerHadLiveData(false);setAdminError("");setAdminSuccess("");}else if(title==="Reports"){setAdminModule("REPORTS");setReportsRows([]);setReportsPage(0);setReportsTotal(0);setAdminError("");setAdminSuccess("");void loadSuperAdminReports(0);}else if(title==="Audit"){setAdminModule("AUDIT");setAuditRows([]);setAuditPage(0);setAuditHasNext(false);setAdminError("");setAdminSuccess("");void loadAuditModule(0);}else setAdminError(`${title} module is the next build step.`);}}><b>{title}</b><small>{sub}</small></button>)}
+{[["Settlement","Settle market / Bazi"],["Bet Analyzer","Single / Patti / Jodi analysis"],["Reports","Betting activity reports"],["Audit","Traceable activity history"]].map(([title,sub])=><button key={title} className="admin-module-card" onClick={()=>{if(title==="Settlement"){setAdminModule("SETTLEMENT");setAdminError("");setAdminSuccess("");void loadSettlementModule();}else if(title==="Bet Analyzer"){setAdminModule("BET_ANALYZER");setBetAnalyzerView("ANALYZER");setBetAnalyzerRows([]);setBetAnalyzerOpenPanel("SINGLE");setBetAnalyzerDate(getLocalDateString());setBetAnalyzerGameId("");setBetAnalyzerBaziValue("");setBetAnalyzerSelectedSessionId("");setBetAnalyzerSelectedSession(null);setBetAnalyzerHadLiveData(false);setAdminError("");setAdminSuccess("");}else if(title==="Reports"){setAdminModule("REPORTS");setReportsRows([]);setReportsPage(0);setReportsTotal(0);setAdminError("");setAdminSuccess("");void loadSuperAdminReports(0);}else if(title==="Audit"){setAdminModule("AUDIT");setAuditView("HOME");setAuditTransactionRows([]);setAuditSettlementRows([]);setAuditTransactionPage(0);setAuditSettlementPage(0);setAuditTransactionHasNext(false);setAuditSettlementHasNext(false);setAdminError("");setAdminSuccess("");}else setAdminError(`${title} module is the next build step.`);}}><b>{title}</b><small>{sub}</small></button>)}
 </section>
 <section className="admin-supply-card">
 <div className="admin-section-kicker">VIRTUAL COIN CONTROL</div>
@@ -8314,75 +8350,125 @@ Target supply: <b>1,000,000 virtual USD coins</b>. Use the Agent Wallet and Onli
 </>
   ) : adminModule === "AUDIT" ? (
 <>
-<section className="admin-panel-card">
-  <div className="admin-panel-title-row">
+<section className="admin-panel-card audit-module-panel">
+  <div className="admin-panel-title-row audit-title-row">
     <div>
-      <div className="admin-panel-title">AUDIT TRAIL</div>
+      <div className="admin-panel-title">AUDIT</div>
       <p className="admin-account-detail-intro" style={{ marginBottom: 0 }}>
-        Read-only activity history from the verified Super Admin audit log.
+        Read-only financial and settlement history. Existing records are preserved.
       </p>
     </div>
-    <button
-      type="button"
-      className="admin-small-action"
-      onClick={() => void loadAuditModule(auditPage)}
-      disabled={auditLoading}
-    >
-      {auditLoading ? "LOADING..." : "REFRESH AUDIT"}
-    </button>
+    {auditView !== "HOME" ? (
+      <button type="button" className="admin-small-action" onClick={() => { setAuditView("HOME"); setAdminError(""); }}>BACK</button>
+    ) : null}
   </div>
 
-  {auditLoading ? <div className="admin-empty">LOADING AUDIT HISTORY...</div> : auditRows.length === 0 ? <div className="admin-empty">No audit records found.</div> : (
-    <>
-      <div className="reports-table-scroll">
-        <table className="reports-table audit-table">
-          <thead>
-            <tr>
-              <th>DATE &amp; TIME</th>
-              <th>ACTION</th>
-              <th>TYPE</th>
-              <th>REFERENCE</th>
-              <th>AMOUNT</th>
-              <th>ACTOR</th>
-              <th>DETAILS</th>
-            </tr>
-          </thead>
-          <tbody>
-            {auditRows.map((row) => (
-              <tr key={row.id}>
-                <td>{row.created_at ? new Date(row.created_at).toLocaleString("en-IN") : "-"}</td>
-                <td className="reports-strong">{row.action_type || "-"}</td>
-                <td>{row.target_type || "-"}</td>
-                <td>{row.reference_code || "-"}</td>
-                <td>{row.amount != null ? `$${row.amount.toFixed(2)}` : "-"}</td>
-                <td>{row.actor_role || "-"}</td>
-                <td className="audit-details-cell">{row.reason || "-"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+  {auditView === "HOME" ? (
+    <div className="audit-module-grid">
+      <button type="button" className="audit-module-card" onClick={() => { setAuditView("TRANSACTION"); setAuditTransactionPage(0); setAdminError(""); void loadAuditTransactions(0); }}>
+        <span className="audit-module-icon">↔</span>
+        <span>
+          <b>TRANSACTION</b>
+          <small>Super Admin coin movement — given and received.</small>
+        </span>
+        <strong>›</strong>
+      </button>
+      <button type="button" className="audit-module-card" onClick={() => { setAuditView("SETTLEMENT"); setAuditSettlementPage(0); setAdminError(""); void loadAuditSettlements(0); }}>
+        <span className="audit-module-icon">✓</span>
+        <span>
+          <b>SETTLEMENT</b>
+          <small>Game settlement, result, network change and unburned balance.</small>
+        </span>
+        <strong>›</strong>
+      </button>
+    </div>
+  ) : auditView === "TRANSACTION" ? (
+    <div className="audit-detail-shell">
+      <div className="audit-detail-header">
+        <div>
+          <b>TRANSACTION AUDIT</b>
+          <small>Only Super Admin coin transfers. 25 entries per page.</small>
+        </div>
+        <button type="button" className="admin-small-action" onClick={() => void loadAuditTransactions(auditTransactionPage)} disabled={auditLoading}>
+          {auditLoading ? "LOADING..." : "REFRESH"}
+        </button>
       </div>
 
-      <div className="admin-pagination">
-        <button
-          type="button"
-          className="admin-small-action"
-          disabled={auditPage <= 0 || auditLoading}
-          onClick={() => void loadAuditModule(auditPage - 1)}
-        >
-          PREVIOUS
-        </button>
-        <span>PAGE {auditPage + 1}{" • "}SHOWING {auditRows.length}</span>
-        <button
-          type="button"
-          className="admin-small-action"
-          disabled={auditLoading || !auditHasNext}
-          onClick={() => void loadAuditModule(auditPage + 1)}
-        >
-          NEXT
+      {auditLoading ? <div className="audit-empty">LOADING TRANSACTION HISTORY...</div> : auditTransactionRows.length === 0 ? <div className="audit-empty">No transaction records found.</div> : (
+        <>
+          <div className="audit-white-scroll">
+            <table className="audit-white-table audit-transaction-table">
+              <thead><tr><th>DATE &amp; TIME</th><th>COUNTERPARTY</th><th>DIRECTION</th><th>AMOUNT</th><th>SUPER ADMIN AVAILABLE AFTER</th></tr></thead>
+              <tbody>
+                {auditTransactionRows.map((row) => (
+                  <tr key={row.transaction_id}>
+                    <td>{row.created_at ? new Date(row.created_at).toLocaleString("en-IN") : "-"}</td>
+                    <td>
+                      <b className="audit-counterparty-name">{row.username || "-"}</b>
+                      <span className={`audit-counterparty-type ${row.counterparty_type === "ONLINE CUSTOMER" ? "online" : "agent"}`}>{row.counterparty_type || "-"}</span>
+                    </td>
+                    <td><span className={`audit-direction ${row.direction === "RECEIVED" ? "received" : "given"}`}>{row.direction}</span></td>
+                    <td className="audit-amount-cell">${row.amount.toFixed(2)}</td>
+                    <td className="audit-after-cell">${row.super_admin_available_after.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="audit-pagination">
+            <button type="button" className="audit-page-btn" disabled={auditTransactionPage <= 0 || auditLoading} onClick={() => void loadAuditTransactions(auditTransactionPage - 1)}>PREVIOUS</button>
+            <span>PAGE {auditTransactionPage + 1} • SHOWING {auditTransactionRows.length}</span>
+            <button type="button" className="audit-page-btn" disabled={!auditTransactionHasNext || auditLoading} onClick={() => void loadAuditTransactions(auditTransactionPage + 1)}>NEXT</button>
+          </div>
+        </>
+      )}
+    </div>
+  ) : (
+    <div className="audit-detail-shell">
+      <div className="audit-detail-header">
+        <div>
+          <b>SETTLEMENT AUDIT</b>
+          <small>Historical network position includes available balance and exposure. 25 entries per page.</small>
+        </div>
+        <button type="button" className="admin-small-action" onClick={() => void loadAuditSettlements(auditSettlementPage)} disabled={auditLoading}>
+          {auditLoading ? "LOADING..." : "REFRESH"}
         </button>
       </div>
-    </>
+
+      {auditLoading ? <div className="audit-empty">LOADING SETTLEMENT HISTORY...</div> : auditSettlementRows.length === 0 ? <div className="audit-empty">No settlement records found.</div> : (
+        <>
+          <div className="audit-white-scroll">
+            <table className="audit-white-table audit-settlement-table">
+              <thead><tr><th>DATE &amp; TIME</th><th>GAME</th><th>BAZI</th><th>RESULT</th><th>SETTLEMENT / BET AMOUNT</th><th>NETWORK CHANGE</th><th>NETWORK UNBURNED AVAILABLE AFTER</th></tr></thead>
+              <tbody>
+                {auditSettlementRows.map((row) => {
+                  const positive = row.network_change > 0;
+                  const negative = row.network_change < 0;
+                  return (
+                    <tr key={row.settlement_id}>
+                      <td>{row.settled_at ? new Date(row.settled_at).toLocaleString("en-IN") : "-"}</td>
+                      <td className="audit-game-cell">{row.game_name}</td>
+                      <td><span className="audit-bazi-badge">{row.bazi_label}</span></td>
+                      <td className="audit-result-cell">{row.result_text}</td>
+                      <td className="audit-amount-cell">${row.settlement_amount.toFixed(2)}</td>
+                      <td className={positive ? "audit-network-positive" : negative ? "audit-network-negative" : "audit-network-neutral"}>
+                        {positive ? "+" : negative ? "−" : ""}${Math.abs(row.network_change).toFixed(2)}
+                      </td>
+                      <td className="audit-after-cell">${row.network_unburned_available_after.toFixed(2)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="audit-pagination">
+            <button type="button" className="audit-page-btn" disabled={auditSettlementPage <= 0 || auditLoading} onClick={() => void loadAuditSettlements(auditSettlementPage - 1)}>PREVIOUS</button>
+            <span>PAGE {auditSettlementPage + 1} • SHOWING {auditSettlementRows.length}</span>
+            <button type="button" className="audit-page-btn" disabled={!auditSettlementHasNext || auditLoading} onClick={() => void loadAuditSettlements(auditSettlementPage + 1)}>NEXT</button>
+          </div>
+        </>
+      )}
+    </div>
   )}
 </section>
 </>
@@ -12335,22 +12421,6 @@ cursor: pointer;
 }
 .reports-table td { color: #edf1f5; font-weight: 600; }
 .reports-table tr:last-child td { border-bottom: 0; }
-.audit-table {
-  min-width: 980px;
-}
-.audit-table th:nth-child(1), .audit-table td:nth-child(1) { width: 145px; }
-.audit-table th:nth-child(2), .audit-table td:nth-child(2) { width: 170px; }
-.audit-table th:nth-child(3), .audit-table td:nth-child(3) { width: 135px; }
-.audit-table th:nth-child(4), .audit-table td:nth-child(4) { width: 190px; }
-.audit-table th:nth-child(5), .audit-table td:nth-child(5) { width: 105px; }
-.audit-table th:nth-child(6), .audit-table td:nth-child(6) { width: 105px; }
-.audit-table th:nth-child(7), .audit-table td:nth-child(7) { width: 300px; }
-.audit-details-cell {
-  white-space: normal !important;
-  min-width: 300px;
-  max-width: 420px;
-  line-height: 1.4;
-}
 .reports-strong { color: #ffffff !important; font-weight: 800 !important; }
 .reports-bet-value { color: #ffd84d !important; font-weight: 800 !important; }
 .reports-source {
@@ -15510,6 +15580,89 @@ color: #111;
     font-size:11px !important;
   }
 }
+
+/* =========================================================
+   AUDIT MODULE — COMPACT PREMIUM / WHITE DETAIL AREA
+   ========================================================= */
+.audit-module-card{
+  display:grid;
+  grid-template-columns:42px minmax(0,1fr) 28px;
+  align-items:center;
+  gap:10px;
+  min-height:82px;
+  padding:12px;
+  border:1px solid rgba(255,198,40,.22);
+  border-radius:11px;
+  background:linear-gradient(145deg,#12171e,#090c11);
+  color:#fff;
+  text-align:left;
+  cursor:pointer;
+}
+.audit-module-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:9px;
+}
+.audit-module-card:hover{border-color:rgba(255,211,59,.58);}
+.audit-module-icon{
+  width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;
+  border:1px solid rgba(255,205,55,.35);background:#17140b;color:#ffd43d;font-size:17px;font-weight:900;
+}
+.audit-module-card b{display:block;color:#ffd43d;font-size:10px;letter-spacing:.4px;}
+.audit-module-card small{display:block;margin-top:4px;color:#8f96a0;font-size:7.5px;line-height:1.45;}
+.audit-module-card strong{width:25px;height:25px;border:1px solid rgba(255,205,55,.38);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#ffd43d;font-size:18px;}
+.audit-detail-shell{background:#fff;border:1px solid #dfe3e8;border-radius:10px;overflow:hidden;color:#111;}
+.audit-detail-header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 12px;border-bottom:1px solid #e5e7eb;background:#fff;}
+.audit-detail-header b{display:block;color:#111;font-size:10px;letter-spacing:.35px;}
+.audit-detail-header small{display:block;margin-top:3px;color:#68707a;font-size:7px;line-height:1.45;}
+.audit-white-scroll{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.audit-white-table{width:100%;min-width:760px;border-collapse:collapse;table-layout:auto;font-size:9px;background:#fff;}
+.audit-white-table th,.audit-white-table td{padding:8px 9px;border-bottom:1px solid #e8eaed;text-align:left;vertical-align:middle;white-space:nowrap;}
+.audit-white-table th{background:#f5f6f8;color:#3d434a;font-size:7px;font-weight:900;letter-spacing:.04em;}
+.audit-white-table td{color:#252a30;font-weight:600;}
+.audit-white-table tr:last-child td{border-bottom:0;}
+.audit-transaction-table th:nth-child(1){min-width:145px;}
+.audit-transaction-table th:nth-child(2){min-width:150px;}
+.audit-transaction-table th:nth-child(3){min-width:105px;}
+.audit-transaction-table th:nth-child(4){min-width:105px;}
+.audit-transaction-table th:nth-child(5){min-width:180px;}
+.audit-settlement-table{min-width:880px;}
+.audit-settlement-table th:nth-child(1){min-width:145px;}
+.audit-settlement-table th:nth-child(2){min-width:125px;}
+.audit-settlement-table th:nth-child(3){min-width:70px;}
+.audit-settlement-table th:nth-child(4){min-width:105px;}
+.audit-settlement-table th:nth-child(5){min-width:135px;}
+.audit-settlement-table th:nth-child(6){min-width:115px;}
+.audit-settlement-table th:nth-child(7){min-width:190px;}
+.audit-counterparty-name{display:block;color:#111;font-size:9px;}
+.audit-counterparty-type{display:inline-block;margin-top:3px;padding:2px 5px;border-radius:4px;font-size:6px;font-weight:900;letter-spacing:.3px;}
+.audit-counterparty-type.agent{background:#f1edff;color:#6045a8;border:1px solid #ddd4fb;}
+.audit-counterparty-type.online{background:#e9fbfd;color:#087989;border:1px solid #c6eef2;}
+.audit-direction{display:inline-block;padding:3px 6px;border-radius:5px;font-size:7px;font-weight:900;}
+.audit-direction.given{color:#9f2222;background:#fff0f0;border:1px solid #f3caca;}
+.audit-direction.received{color:#13733b;background:#effaf3;border:1px solid #c9ecd8;}
+.audit-amount-cell,.audit-after-cell{font-variant-numeric:tabular-nums;font-weight:800 !important;}
+.audit-after-cell{color:#15191e !important;}
+.audit-bazi-badge{display:inline-block;padding:3px 6px;border-radius:5px;background:#f6f7f9;border:1px solid #e0e3e7;color:#3c434a;font-size:7px;font-weight:900;}
+.audit-game-cell{font-weight:800 !important;color:#111 !important;}
+.audit-result-cell{font-weight:800 !important;color:#111 !important;}
+.audit-network-positive{color:#12853f !important;font-weight:900 !important;}
+.audit-network-negative{color:#c62929 !important;font-weight:900 !important;}
+.audit-network-neutral{color:#4b525a !important;font-weight:800 !important;}
+.audit-empty{padding:18px;text-align:center;background:#fff;color:#68707a;font-size:8px;}
+.audit-pagination{display:flex;align-items:center;justify-content:center;gap:8px;padding:9px;background:#fff;border-top:1px solid #e5e7eb;}
+.audit-pagination span{color:#626a73;font-size:7px;font-weight:900;}
+.audit-page-btn{height:29px;padding:0 9px;border:1px solid #d3d7dc;border-radius:6px;background:#fff;color:#30363d;font-size:7px;font-weight:900;cursor:pointer;}
+.audit-page-btn:disabled{opacity:.45;cursor:not-allowed;}
+@media(max-width:560px){
+  .audit-module-grid{grid-template-columns:1fr;}
+  .audit-detail-header{align-items:flex-start;}
+  .audit-detail-header .admin-small-action{flex:0 0 auto;}
+  .audit-white-table{font-size:8px;}
+  .audit-white-table th,.audit-white-table td{padding:7px 8px;}
+}
+
+
 `}
 </style>
 
