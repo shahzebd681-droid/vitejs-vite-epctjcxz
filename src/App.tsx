@@ -8398,11 +8398,21 @@ Target supply: <b>1,000,000 virtual USD coins</b>. Use the Agent Wallet and Onli
         <>
           <div className="audit-white-scroll">
             <table className="audit-white-table audit-transaction-table">
-              <thead><tr><th>DATE &amp; TIME</th><th>COUNTERPARTY</th><th>DIRECTION</th><th>AMOUNT</th><th>SUPER ADMIN AVAILABLE AFTER</th></tr></thead>
+              <thead><tr><th>DATE &amp; TIME</th><th>COUNTERPARTY</th><th>DIRECTION</th><th>AMOUNT</th><th>SUPER ADMIN AVAILABLE</th></tr></thead>
               <tbody>
                 {auditTransactionRows.map((row) => (
                   <tr key={row.transaction_id}>
-                    <td>{row.created_at ? new Date(row.created_at).toLocaleString("en-IN") : "-"}</td>
+                    <td className="audit-date-time-cell">
+                        {row.created_at ? (() => {
+                          const dateTime = new Date(row.created_at);
+                          return (
+                            <>
+                              <span>{dateTime.toLocaleDateString("en-IN")}</span>
+                              <span>{dateTime.toLocaleTimeString("en-IN")}</span>
+                            </>
+                          );
+                        })() : "-"}
+                      </td>
                     <td>
                       <b className="audit-counterparty-name">{row.username || "-"}</b>
                       <span className={`audit-counterparty-type ${row.counterparty_type === "ONLINE CUSTOMER" ? "online" : "agent"}`}>{row.counterparty_type || "-"}</span>
@@ -8439,14 +8449,24 @@ Target supply: <b>1,000,000 virtual USD coins</b>. Use the Agent Wallet and Onli
         <>
           <div className="audit-white-scroll">
             <table className="audit-white-table audit-settlement-table">
-              <thead><tr><th>DATE &amp; TIME</th><th>GAME</th><th>BAZI</th><th>RESULT</th><th>SETTLEMENT / BET AMOUNT</th><th>NETWORK CHANGE</th><th>NETWORK UNBURNED AVAILABLE AFTER</th></tr></thead>
+              <thead><tr><th>DATE &amp; TIME</th><th>GAME</th><th>BAZI</th><th>RESULT</th><th>SETTLEMENT / BET AMOUNT</th><th>NETWORK CHANGE</th><th>TOTAL NETWORK COINS</th></tr></thead>
               <tbody>
                 {auditSettlementRows.map((row) => {
                   const positive = row.network_change > 0;
                   const negative = row.network_change < 0;
                   return (
                     <tr key={row.settlement_id}>
-                      <td>{row.settled_at ? new Date(row.settled_at).toLocaleString("en-IN") : "-"}</td>
+                      <td className="audit-date-time-cell">
+                        {row.settled_at ? (() => {
+                          const dateTime = new Date(row.settled_at);
+                          return (
+                            <>
+                              <span>{dateTime.toLocaleDateString("en-IN")}</span>
+                              <span>{dateTime.toLocaleTimeString("en-IN")}</span>
+                            </>
+                          );
+                        })() : "-"}
+                      </td>
                       <td className="audit-game-cell">{row.game_name}</td>
                       <td><span className="audit-bazi-badge">{row.bazi_label}</span></td>
                       <td className="audit-result-cell">{row.result_text}</td>
@@ -15658,8 +15678,67 @@ color: #111;
   .audit-module-grid{grid-template-columns:1fr;}
   .audit-detail-header{align-items:flex-start;}
   .audit-detail-header .admin-small-action{flex:0 0 auto;}
-  .audit-white-table{font-size:8px;}
-  .audit-white-table th,.audit-white-table td{padding:7px 8px;}
+  .audit-white-table{
+    width:100%;
+    min-width:0;
+    table-layout:fixed;
+    font-size:8px;
+  }
+  .audit-white-table th,
+  .audit-white-table td{
+    padding:7px 5px;
+    white-space:normal;
+    overflow-wrap:anywhere;
+  }
+  .audit-white-scroll{
+    overflow-x:hidden;
+  }
+  .audit-date-time-cell{
+    white-space:normal !important;
+    line-height:1.25;
+    font-variant-numeric:tabular-nums;
+  }
+  .audit-date-time-cell span{
+    display:block;
+  }
+  .audit-counterparty-name{
+    font-size:8px;
+    line-height:1.2;
+    overflow-wrap:anywhere;
+  }
+  .audit-counterparty-type{
+    max-width:100%;
+    margin-top:3px;
+    font-size:5.5px;
+    padding:2px 4px;
+  }
+  .audit-direction{
+    font-size:6.5px;
+    padding:3px 5px;
+  }
+  .audit-transaction-table th:nth-child(1){width:20%;}
+  .audit-transaction-table th:nth-child(2){width:23%;}
+  .audit-transaction-table th:nth-child(3){width:16%;}
+  .audit-transaction-table th:nth-child(4){width:16%;}
+  .audit-transaction-table th:nth-child(5){width:25%;}
+  .audit-settlement-table th:nth-child(1){width:17%;}
+  .audit-settlement-table th:nth-child(2){width:13%;}
+  .audit-settlement-table th:nth-child(3){width:11%;}
+  .audit-settlement-table th:nth-child(4){width:13%;}
+  .audit-settlement-table th:nth-child(5){width:16%;}
+  .audit-settlement-table th:nth-child(6){width:14%;}
+  .audit-settlement-table th:nth-child(7){width:16%;}
+  .audit-settlement-table .audit-bazi-badge{
+    padding:3px 4px;
+    font-size:6px;
+  }
+  .audit-game-cell,
+  .audit-result-cell,
+  .audit-amount-cell,
+  .audit-after-cell{
+    font-size:7.5px;
+    overflow-wrap:anywhere;
+  }
 }
 
 
