@@ -4978,7 +4978,7 @@ for this Bazi.
 <span>
 
 
-{betType} Rate
+{betType} Rate (Win 1 {betType === "Single" ? "Number" : betType === "Jodi" ? "Jodi" : "Patti"})
 
 
 </span>
@@ -5005,7 +5005,7 @@ for this Bazi.
 <div className="betting-section-title">
 
 
-SELECT NUMBER / ENTRY
+{betType === "Single Patti" ? "SELECT PATTI / ENTRY (000 – 999)" : betType === "Jodi" ? "SELECT JODI NUMBER (00 – 99)" : "SELECT NUMBER / ENTRY"}
 
 
 </div>
@@ -5217,7 +5217,7 @@ SELECT NUMBER / ENTRY
 <div className="betting-section-title">
 
 
-SELECT AMOUNT
+SELECT AMOUNT (USD COINS)
 
 
 </div>
@@ -15915,6 +15915,239 @@ color: #111;
 
 
 
+/* =========================================================
+   CUSTOMER BETTING INTERFACE — CONFIRMED REFERENCE VISUAL
+   Frontend-only visual/interaction patch.
+   Existing bet data, rates, selection logic, wallet, exposure,
+   submission, session locking and settlement are untouched.
+   ========================================================= */
+
+.betting-context{
+  border:1px solid rgba(255,201,35,.78);
+  box-shadow:0 0 0 1px rgba(255,193,7,.06), inset 0 0 16px rgba(255,193,7,.025);
+}
+
+.betting-section-title{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  margin:14px 0 7px;
+  color:#f0f0f0;
+  font-size:9px;
+  font-weight:900;
+  letter-spacing:.45px;
+  text-align:center;
+}
+.betting-section-title::before,
+.betting-section-title::after{
+  content:"";
+  flex:1 1 0;
+  max-width:72px;
+  height:3px;
+  border-radius:999px;
+  background:linear-gradient(90deg,transparent,#f5c52d,#f5c52d);
+}
+.betting-section-title::after{
+  background:linear-gradient(90deg,#f5c52d,#f5c52d,transparent);
+}
+
+.bet-type-btn{
+  min-height:46px;
+  border:1px solid rgba(255,193,7,.72);
+  background:linear-gradient(145deg,#0b1118,#070b10);
+  color:#f0f0f0;
+  box-shadow:inset 0 0 12px rgba(255,193,7,.018);
+}
+.bet-type-reference-number{
+  min-width:48px;
+  padding-right:10px;
+  border-right:1px solid rgba(255,255,255,.22);
+  color:#f4f4f4;
+  font-size:21px;
+  font-weight:900;
+  line-height:1;
+}
+.bet-type-label{font-size:11px;color:#f0f0f0;}
+.bet-type-btn.selected{
+  border-color:#ffd13b;
+  background:linear-gradient(135deg,#ffe36a,#ffbd19);
+  color:#17120a;
+  box-shadow:0 0 12px rgba(255,193,7,.13),inset 0 0 12px rgba(255,255,255,.16);
+}
+.bet-type-btn.selected .bet-type-reference-number{
+  color:#17120a;
+  border-right-color:rgba(23,18,10,.28);
+}
+.bet-type-btn.selected .bet-type-label{color:#17120a;}
+
+.rate-box{
+  margin-top:8px;
+  padding:9px 10px;
+  border:1px solid rgba(255,193,7,.62);
+  border-radius:7px;
+  background:rgba(255,193,7,.035);
+  color:#e6e6e6;
+  font-size:8px;
+}
+.rate-box strong{font-size:17px;color:#ffd13b;}
+
+.number-btn{
+  min-height:46px;
+  border:1px solid rgba(255,193,7,.28);
+  border-radius:7px;
+  background:linear-gradient(180deg,#ffffff,#f1f1f1);
+  color:#111;
+  font-size:18px;
+  font-weight:900;
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.06),0 1px 3px rgba(0,0,0,.28);
+}
+.number-btn:not(.selected) span{
+  color:#111 !important;
+  font-size:18px !important;
+  font-weight:900;
+  text-shadow:none;
+}
+.number-btn small{color:#111 !important;font-size:9px;font-weight:900;}
+.number-btn.selected{
+  border-color:#ffd13b;
+  background:linear-gradient(135deg,#ffe66b,#ffc51f);
+  color:#111;
+  box-shadow:0 0 0 1px rgba(255,193,7,.2),0 2px 7px rgba(255,193,7,.12);
+}
+.number-btn.selected span{color:#111 !important;font-size:18px !important;}
+.number-btn.selected small{color:#111 !important;}
+
+.patti-groups{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:7px;
+  max-height:none;
+  overflow:visible;
+  padding:0;
+}
+.patti-group{
+  padding:0 4px 4px;
+  border:2px solid #c99512;
+  border-radius:8px;
+  background:#090d12;
+  overflow:hidden;
+  box-shadow:0 1px 4px rgba(0,0,0,.35);
+}
+.patti-group-title{
+  margin:0 -1px 4px;
+  padding:5px 4px;
+  border-radius:5px 5px 3px 3px;
+  background:linear-gradient(180deg,#ffd83f,#e8aa12);
+  color:#111;
+  font-size:12px;
+  font-weight:900;
+  letter-spacing:.2px;
+  text-align:center;
+}
+.patti-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:2px;}
+.patti-grid .number-btn{min-height:29px;border-radius:4px;font-size:11px;}
+.patti-grid .number-btn span,
+.patti-grid .number-btn:not(.selected) span,
+.patti-grid .number-btn.selected span{font-size:11px !important;}
+.patti-grid .number-btn small{font-size:7px;}
+.patti-triple-grid{grid-template-columns:repeat(3,minmax(0,1fr));}
+
+.amount-btn,
+.amount-btn.selected{
+  width:72px;
+  height:48px;
+  min-height:48px;
+  border:1px solid #b9c4d0;
+  border-radius:999px;
+  background:linear-gradient(180deg,#ffffff,#dfe8f2);
+  color:#111 !important;
+  font-size:13px;
+  font-weight:900;
+  text-shadow:none;
+  box-shadow:inset 0 1px 2px rgba(255,255,255,.95),0 2px 5px rgba(0,0,0,.32);
+}
+.amount-btn.selected{
+  border-color:#f1cf61;
+  background:linear-gradient(180deg,#fffdf2,#dce7f1);
+  box-shadow:inset 0 1px 2px rgba(255,255,255,.98),0 0 0 2px rgba(255,193,7,.18),0 3px 7px rgba(0,0,0,.32);
+}
+.amount-grid{gap:8px;}
+
+.selected-bets-panel{
+  border:1px solid rgba(255,193,7,.82);
+  background:#070b10;
+  box-shadow:inset 0 0 14px rgba(255,193,7,.018);
+}
+.selected-bets-title{font-size:9px;color:#ffd13b;}
+.selected-bets-list{
+  max-height:355px;
+  overflow-y:auto;
+  overflow-x:hidden;
+  padding-right:3px;
+  scrollbar-width:thin;
+  scrollbar-color:#c79b20 #0b1017;
+}
+.selected-bets-list::-webkit-scrollbar{width:5px;}
+.selected-bets-list::-webkit-scrollbar-track{background:#0b1017;border-radius:8px;}
+.selected-bets-list::-webkit-scrollbar-thumb{background:#c79b20;border-radius:8px;}
+.selected-bet-row{
+  min-height:31px;
+  padding:4px 6px;
+  border-radius:5px;
+  background:linear-gradient(180deg,#0b121a,#080d13);
+  border:1px solid #202c38;
+  font-size:9px;
+  font-weight:900;
+}
+.selected-bet-number{
+  flex:0 0 46px;
+  min-width:46px;
+  padding:4px 5px;
+  border-radius:5px;
+  background:linear-gradient(135deg,#ffe66b,#ffc51f);
+  color:#111 !important;
+  font-size:12px;
+  font-weight:900;
+  line-height:1;
+  text-align:center;
+}
+.selected-bet-row strong{
+  flex:1 1 auto;
+  min-width:0;
+  margin-left:9px;
+  color:#f4f4f4;
+  font-size:10px;
+  text-align:left;
+}
+.selected-bet-remove{
+  width:24px;
+  height:24px;
+  margin-left:7px;
+  flex:0 0 24px;
+  border:1px solid rgba(255,65,65,.65);
+  border-radius:6px;
+  background:rgba(255,50,50,.08);
+  color:#ff3e4d;
+  font-size:18px;
+  line-height:20px;
+}
+
+@media (max-width:390px){
+  .bet-type-reference-number{min-width:43px;padding-right:8px;font-size:18px;}
+  .bet-type-label{font-size:10px;}
+  .number-btn{min-height:43px;}
+  .number-btn:not(.selected) span,
+  .number-btn.selected span{font-size:16px !important;}
+  .patti-groups{gap:5px;}
+  .patti-group-title{font-size:10px;padding:4px;}
+  .patti-grid .number-btn{min-height:27px;}
+  .patti-grid .number-btn span,
+  .patti-grid .number-btn:not(.selected) span,
+  .patti-grid .number-btn.selected span{font-size:10px !important;}
+  .amount-btn,.amount-btn.selected{width:64px;height:46px;min-height:46px;font-size:12px;}
+  .selected-bets-list{max-height:355px;}
+}
 `}
 </style>
 
