@@ -2170,6 +2170,15 @@ const loadCustomerResultHistory = async () => {
       else if (raw.includes("main bazar")) gameMap.set(String(game.id), "Main Bazar");
     }
 
+    // Historical-result fallback uses the exact verified game IDs already present
+    // in the database. This keeps historical rendering independent of the
+    // game_sessions lookup while preserving the normal games lookup for live data.
+    const historicalGameMap = new Map<string, GameName>([
+      ["17d967ee-8c0b-4ebb-9169-576f2813044b", "Main Bazar"],
+      ["00128f60-5bae-4d20-87b9-71c0ed880a9e", "Kolkata Fatafat"],
+      ["b51fa0a9-d988-4e15-91be-804554a65e7d", "Dus ka Dum"],
+    ]);
+
     const resultMap = new Map<string, any>();
     for (const batchResult of resultBatches) {
       for (const result of batchResult.data || []) {
@@ -2204,7 +2213,8 @@ const loadCustomerResultHistory = async () => {
 
     const normalizedHistorical = historicalRows
       .map((row: any) => {
-        const game = gameMap.get(String(row.game_id || ""));
+        const gameId = String(row.game_id || "");
+        const game = gameMap.get(gameId) || historicalGameMap.get(gameId);
         if (!game) return null;
         const normalizedMarket = String(row.market || "").trim().toUpperCase();
         const normalizedBazi = row.bazi_no == null ? null : Number(row.bazi_no);
