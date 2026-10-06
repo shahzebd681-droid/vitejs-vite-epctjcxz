@@ -1988,89 +1988,89 @@ const loadTodayGameResults = async () => {
     // guests may not have direct SELECT access to that table because of RLS.
     const todayNormalized = normalized;
 
-    // Main Bazar follows the overnight cycle. The public "today" RPC only
-    // returns today's rows, so when a market has no declared result today,
-    // fall back to the latest declared result for that same Main Bazar market.
-    const mainBazarTodayMarkets = new Set(
-      todayNormalized
-        .filter((row) => row.game === "Main Bazar")
-        .map((row) => String(row.market || "").toUpperCase())
-    );
+    // Main Bazar results are strictly today-only. The previous-day fallback has been removed.
+    // If today has no declared result for a market, getTodayGameResult() returns null ("—").
+    // Do not carry any previous-day Main Bazar result into the current day.
 
-    const missingMainBazarMarkets = ["OPEN", "CLOSE"].filter(
-      (market) => !mainBazarTodayMarkets.has(market)
-    );
 
-    let mainBazarFallback: TodayGameResult[] = [];
 
-    if (getKolkataHour(resultNow) < 2 && missingMainBazarMarkets.length > 0) {
-      const { data: mainBazarGames, error: mainBazarGamesError } = await supabase
-        .from("games")
-        .select("id, game_name")
-        .ilike("game_name", "Main Bazar");
 
-      if (mainBazarGamesError) throw mainBazarGamesError;
 
-      const mainBazarGameIds = (mainBazarGames || []).map((game) => String(game.id));
 
-      if (mainBazarGameIds.length > 0) {
-        const { data: mainBazarSessions, error: mainBazarSessionsError } = await supabase
-          .from("game_sessions")
-          .select("id, game_id, session_date, bazi_no, market, opening_time")
-          .in("game_id", mainBazarGameIds)
-          .eq("scheduled_playable", true)
-          .lt("session_date", resultTodayDate)
-          .in("market", missingMainBazarMarkets)
-          .order("session_date", { ascending: false })
-          .order("opening_time", { ascending: false })
-          .limit(60);
 
-        if (mainBazarSessionsError) throw mainBazarSessionsError;
 
-        const sessionIds = (mainBazarSessions || []).map((session) => String(session.id));
 
-        if (sessionIds.length > 0) {
-          const { data: mainBazarResults, error: mainBazarResultsError } = await supabase
-            .from("results")
-            .select("session_id, single_digit, patti, status, is_current, declared_at")
-            .in("session_id", sessionIds)
-            .eq("is_current", true)
-            .eq("status", "DECLARED")
-            .order("declared_at", { ascending: false });
 
-          if (mainBazarResultsError) throw mainBazarResultsError;
 
-          const sessionById = new Map(
-            (mainBazarSessions || []).map((session) => [String(session.id), session])
-          );
 
-          const latestByMarket = new Map<string, TodayGameResult>();
 
-          for (const result of mainBazarResults || []) {
-            const session = sessionById.get(String(result.session_id));
-            if (!session) continue;
 
-            const market = String(session.market || "").toUpperCase();
-            if (!missingMainBazarMarkets.includes(market)) continue;
-            if (latestByMarket.has(market)) continue;
 
-            latestByMarket.set(market, {
-              session_id: String(result.session_id),
-              game_id: String(session.game_id),
-              game: "Main Bazar",
-              bazi_no: session.bazi_no == null ? null : Number(session.bazi_no),
-              market,
-              single_digit: Number(result.single_digit),
-              patti: String(result.patti || ""),
-            });
-          }
 
-          mainBazarFallback = Array.from(latestByMarket.values());
-        }
-      }
-    }
 
-    setTodayGameResults([...todayNormalized, ...mainBazarFallback]);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    setTodayGameResults(todayNormalized);
   } catch (error) {
     console.error("=== TODAY GAME RESULTS LOAD ERROR ===", error);
     setTodayGameResults([]);
