@@ -2124,7 +2124,21 @@ const loadCustomerResultHistory = async () => {
 
     const sessionRows = Array.isArray(sessions) ? sessions : [];
     const sessionIds = sessionRows.map((row: any) => String(row.id)).filter(Boolean);
-    const gameIds = Array.from(new Set(sessionRows.map((row: any) => String(row.game_id || "")).filter(Boolean)));
+    const sessionGameIds = Array.from(new Set(sessionRows.map((row: any) => String(row.game_id || "")).filter(Boolean)));
+
+    const historicalResult = await supabase
+      .from("historical_results")
+      .select("id, game_id, session_date, market, bazi_no, single_digit, patti")
+      .gte("session_date", historyStartKey)
+      .lte("session_date", todayDateKey);
+
+    if (historicalResult.error) throw historicalResult.error;
+
+    const historicalRows = Array.isArray(historicalResult.data) ? historicalResult.data : [];
+    const historicalGameIds = historicalRows
+      .map((row: any) => String(row.game_id || ""))
+      .filter(Boolean);
+    const gameIds = Array.from(new Set([...sessionGameIds, ...historicalGameIds]));
 
     const [gamesResult, ...resultBatches] = await Promise.all([
       gameIds.length
@@ -2163,11 +2177,12 @@ const loadCustomerResultHistory = async () => {
       }
     }
 
-    const normalized = sessionRows
+    const normalizedReal = sessionRows
       .map((session: any) => {
         const game = gameMap.get(String(session.game_id || ""));
         if (!game) return null;
         const result = resultMap.get(String(session.id));
+        if (!result?.single_digit && !result?.patti) return null;
         return {
           session_id: String(session.id),
           game_id: String(session.game_id),
@@ -2181,7 +2196,35 @@ const loadCustomerResultHistory = async () => {
       })
       .filter((row): row is CustomerResultRow => Boolean(row));
 
-    setCustomerResultRows(normalized);
+    const realResultKeys = new Set(
+      normalizedReal
+        .filter((row) => Boolean(row.single_digit || row.patti))
+        .map((row) => `${row.game}|${row.session_date}|${row.bazi_no ?? ""}|${row.market}`)
+    );
+
+    const normalizedHistorical = historicalRows
+      .map((row: any) => {
+        const game = gameMap.get(String(row.game_id || ""));
+        if (!game) return null;
+        const normalizedMarket = String(row.market || "").trim().toUpperCase();
+        const normalizedBazi = row.bazi_no == null ? null : Number(row.bazi_no);
+        const sessionDate = String(row.session_date || "");
+        const key = `${game}|${sessionDate}|${normalizedBazi ?? ""}|${normalizedMarket}`;
+        if (realResultKeys.has(key)) return null;
+        return {
+          session_id: `historical-${String(row.id)}`,
+          game_id: String(row.game_id),
+          game,
+          session_date: sessionDate,
+          bazi_no: normalizedBazi,
+          market: normalizedMarket,
+          single_digit: row.single_digit == null ? "" : String(row.single_digit),
+          patti: row.patti ? String(row.patti) : "",
+        };
+      })
+      .filter((row): row is CustomerResultRow => Boolean(row));
+
+    setCustomerResultRows([...normalizedReal, ...normalizedHistorical]);
   } catch (error: any) {
     console.error("=== CUSTOMER RESULT HISTORY LOAD ERROR ===", error);
     setCustomerResultRows([]);
@@ -5871,11 +5914,11 @@ const renderCustomerDailyResultCard = (game: "Kolkata Fatafat" | "Dus ka Dum", d
 };
 
 const renderCustomerDailyResults = (game: "Kolkata Fatafat" | "Dus ka Dum") => {
-  const dates = Array.from(new Set(
-    customerResultRows
-      .filter((row) => row.game === game)
-      .map((row) => row.session_date)
-  )).sort((a, b) => b.localeCompare(a)).slice(0, 30);
+  const dates = Array.from({ length: 30 }, (_, index) => {
+    const date = new Date(`${todayDateKey}T00:00:00`);
+    date.setDate(date.getDate() - index);
+    return getLocalDateString(date);
+  });
 
   return (
     <section className="customer-result-panel">
