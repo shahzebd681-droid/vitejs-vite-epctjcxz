@@ -661,6 +661,9 @@ type Page =
 | "profile"
 
 
+| "result"
+
+
 | "statement";
 
 
@@ -1743,6 +1746,22 @@ type TodayGameResult = {
 
 const [todayGameResults, setTodayGameResults] = useState<TodayGameResult[]>([]);
 
+type CustomerResultRow = {
+  session_id: string;
+  game_id: string;
+  game: GameName;
+  session_date: string;
+  bazi_no: number | null;
+  market: string;
+  single_digit: string;
+  patti: string;
+};
+
+const [customerResultRows, setCustomerResultRows] = useState<CustomerResultRow[]>([]);
+const [customerResultsLoading, setCustomerResultsLoading] = useState(false);
+const [customerResultsError, setCustomerResultsError] = useState("");
+const [customerResultGame, setCustomerResultGame] = useState<GameName | null>(null);
+
 type AppNavigationHistoryState = {
   apnaMatkaNavigation: true;
   userRole: "SUPER_ADMIN" | "AGENT_ADMIN" | "CUSTOMER" | null;
@@ -2077,9 +2096,115 @@ const loadTodayGameResults = async () => {
   }
 };
 
+const loadCustomerResultHistory = async () => {
+  if (customerResultsLoading) return;
+  setCustomerResultsLoading(true);
+  setCustomerResultsError("");
+  try {
+    const today = new Date(`${todayDateKey}T00:00:00`);
+    const dayOfWeek = today.getDay();
+    const daysFromMonday = (dayOfWeek + 6) % 7;
+    const currentWeekMonday = new Date(today);
+    currentWeekMonday.setDate(today.getDate() - daysFromMonday);
+    const historyStart = new Date(currentWeekMonday);
+    historyStart.setDate(currentWeekMonday.getDate() - 29 * 7);
+    const historyStartKey = getLocalDateString(historyStart);
+
+    const { data: sessions, error: sessionsError } = await supabase
+      .from("game_sessions")
+      .select("id, game_id, session_date, bazi_no, market")
+      .gte("session_date", historyStartKey)
+      .lte("session_date", todayDateKey)
+      .eq("scheduled_playable", true)
+      .order("session_date", { ascending: false })
+      .order("bazi_no", { ascending: true, nullsFirst: true })
+      .order("market", { ascending: true });
+
+    if (sessionsError) throw sessionsError;
+
+    const sessionRows = Array.isArray(sessions) ? sessions : [];
+    const sessionIds = sessionRows.map((row: any) => String(row.id)).filter(Boolean);
+    const gameIds = Array.from(new Set(sessionRows.map((row: any) => String(row.game_id || "")).filter(Boolean)));
+
+    const [gamesResult, ...resultBatches] = await Promise.all([
+      gameIds.length
+        ? supabase.from("games").select("id, game_name").in("id", gameIds)
+        : Promise.resolve({ data: [], error: null }),
+      ...Array.from({ length: Math.ceil(sessionIds.length / 250) }, (_, index) => {
+        const batch = sessionIds.slice(index * 250, index * 250 + 250);
+        return batch.length
+          ? supabase
+              .from("results")
+              .select("session_id, single_digit, patti, status, is_current")
+              .in("session_id", batch)
+              .eq("is_current", true)
+              .eq("status", "DECLARED")
+          : Promise.resolve({ data: [], error: null });
+      }),
+    ]);
+
+    if (gamesResult.error) throw gamesResult.error;
+    for (const batchResult of resultBatches) {
+      if (batchResult.error) throw batchResult.error;
+    }
+
+    const gameMap = new Map<string, GameName>();
+    for (const game of gamesResult.data || []) {
+      const raw = String(game.game_name || "").trim().toLowerCase();
+      if (raw.includes("kolkata")) gameMap.set(String(game.id), "Kolkata Fatafat");
+      else if (raw.includes("dus")) gameMap.set(String(game.id), "Dus ka Dum");
+      else if (raw.includes("main bazar")) gameMap.set(String(game.id), "Main Bazar");
+    }
+
+    const resultMap = new Map<string, any>();
+    for (const batchResult of resultBatches) {
+      for (const result of batchResult.data || []) {
+        resultMap.set(String(result.session_id), result);
+      }
+    }
+
+    const normalized = sessionRows
+      .map((session: any) => {
+        const game = gameMap.get(String(session.game_id || ""));
+        if (!game) return null;
+        const result = resultMap.get(String(session.id));
+        return {
+          session_id: String(session.id),
+          game_id: String(session.game_id),
+          game,
+          session_date: String(session.session_date || ""),
+          bazi_no: session.bazi_no == null ? null : Number(session.bazi_no),
+          market: String(session.market || "").trim().toUpperCase(),
+          single_digit: result?.single_digit == null ? "" : String(result.single_digit),
+          patti: result?.patti ? String(result.patti) : "",
+        };
+      })
+      .filter((row): row is CustomerResultRow => Boolean(row));
+
+    setCustomerResultRows(normalized);
+  } catch (error: any) {
+    console.error("=== CUSTOMER RESULT HISTORY LOAD ERROR ===", error);
+    setCustomerResultRows([]);
+    setCustomerResultsError(error?.message || String(error));
+  } finally {
+    setCustomerResultsLoading(false);
+  }
+};
+
 const todayDateKey = getLocalDateString(currentTime);
 const mainBazarResultCycleKey =
   getKolkataHour(currentTime) >= 2 ? "AFTER_2AM" : "BEFORE_2AM";
+
+useEffect(() => {
+  if (!authReady || customerPage !== "result") return;
+
+  void loadCustomerResultHistory();
+  const timer = setInterval(() => {
+    void loadCustomerResultHistory();
+  }, 30000);
+
+  return () => clearInterval(timer);
+}, [authReady, customerPage, todayDateKey]);
 
 useEffect(() => {
   if (!authReady) return;
@@ -3711,38 +3836,14 @@ History
 
 
 <button
-
-
 className={
-
-
-customerPage === "profile"
-
-
+  customerPage === "result"
     ? "customer-nav-btn active"
-
-
     : "customer-nav-btn"
-
-
 }
-
-
-onClick={() =>
-
-
-openCustomerPage("profile")
-
-
-}
-
-
+onClick={() => openCustomerPage("result")}
 >
-
-
-    Profile
-
-
+  Result
 </button>
 
 
@@ -4248,7 +4349,7 @@ const renderCustomerHome = () => (
       <div className="customer-bottom-nav">
         <button onClick={() => openCustomerPage("home")}>Home</button>
         <button onClick={() => openCustomerPage("history")}>History</button>
-        <button onClick={() => openCustomerPage("profile")}>Profile</button>
+        <button onClick={() => openCustomerPage("result")}>Result</button>
       </div>
     </main>
     {renderCustomerFooter()}
@@ -5643,6 +5744,187 @@ NEXT
 </>
 );
 };
+
+/* =========================================================
+
+
+RESULT HISTORY
+
+
+========================================================= */
+
+const formatCustomerResultDate = (dateKey: string) => {
+  if (!dateKey) return "--";
+  return new Date(`${dateKey}T00:00:00`).toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+};
+
+const getCustomerMainWeeks = () => {
+  const today = new Date(`${todayDateKey}T00:00:00`);
+  const dayOfWeek = today.getDay();
+  const daysFromMonday = (dayOfWeek + 6) % 7;
+  const currentMonday = new Date(today);
+  currentMonday.setDate(today.getDate() - daysFromMonday);
+
+  return Array.from({ length: 30 }, (_, index) => {
+    const monday = new Date(currentMonday);
+    monday.setDate(currentMonday.getDate() - index * 7);
+    return Array.from({ length: 5 }, (_, dayIndex) => {
+      const date = new Date(monday);
+      date.setDate(monday.getDate() + dayIndex);
+      return getLocalDateString(date);
+    });
+  });
+};
+
+const getCustomerResultForSession = (date: string, game: GameName, bazi: number | null, market?: string) =>
+  customerResultRows.find((row) =>
+    row.session_date === date &&
+    row.game === game &&
+    (bazi == null ? row.bazi_no == null : row.bazi_no === bazi) &&
+    (market ? row.market === market : true)
+  ) || null;
+
+const renderMainBazarResultCell = (date: string) => {
+  const open = getCustomerResultForSession(date, "Main Bazar", null, "OPEN");
+  const close = getCustomerResultForSession(date, "Main Bazar", null, "CLOSE");
+
+  return (
+    <div className="customer-result-main-cell">
+      <div className="customer-result-patti customer-result-patti-left">
+        {(open?.patti || "---").split("").map((digit, index) => <span key={`open-${date}-${index}`}>{digit}</span>)}
+      </div>
+      <div className="customer-result-main-number">
+        <span>{open?.single_digit || ""}</span>
+        <span>{close?.single_digit || ""}</span>
+        {!open?.single_digit && !close?.single_digit ? "--" : null}
+      </div>
+      <div className="customer-result-patti customer-result-patti-right">
+        {(close?.patti || "---").split("").map((digit, index) => <span key={`close-${date}-${index}`}>{digit}</span>)}
+      </div>
+    </div>
+  );
+};
+
+const renderMainBazarResults = () => {
+  const weeks = getCustomerMainWeeks();
+  const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+
+  return (
+    <section className="customer-result-panel">
+      <div className="customer-result-table-scroll">
+        <div className="customer-result-main-table">
+          <div className="customer-result-main-header">
+            <div>DATE</div>
+            {weekdays.map((day) => <div key={day}>{day}</div>)}
+          </div>
+          {weeks.map((week, weekIndex) => {
+            const first = week[0];
+            const last = week[4];
+            return (
+              <div className="customer-result-main-row" key={`week-${first}`}>
+                <div className="customer-result-week-date">
+                  <span>{formatCustomerResultDate(first)}</span>
+                  <span>to</span>
+                  <span>{formatCustomerResultDate(last)}</span>
+                </div>
+                {week.map((date) => (
+                  <div className="customer-result-main-day" key={`${weekIndex}-${date}`}>
+                    {renderMainBazarResultCell(date)}
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+};
+
+const renderCustomerDailyResultCard = (game: "Kolkata Fatafat" | "Dus ka Dum", date: string) => {
+  const maxBazi = game === "Kolkata Fatafat" ? 8 : 10;
+  const isSunday = new Date(`${date}T00:00:00`).getDay() === 0;
+  const visibleBazi = isSunday ? (game === "Kolkata Fatafat" ? 4 : 5) : maxBazi;
+
+  return (
+    <div className="customer-result-day-card" key={`${game}-${date}`}>
+      <div className="customer-result-day-title">{formatCustomerResultDate(date)}</div>
+      <div className={`customer-result-bazi-grid ${game === "Dus ka Dum" ? "dus-grid" : ""}`}>
+        {Array.from({ length: visibleBazi }, (_, index) => {
+          const bazi = index + 1;
+          const result = getCustomerResultForSession(date, game, bazi);
+          return (
+            <div className="customer-result-bazi-box" key={`${date}-${bazi}`}>
+              <div className="customer-result-bazi-label">BAZI {bazi}</div>
+              <div className="customer-result-bazi-patti">{result?.patti || "--"}</div>
+              <div className="customer-result-bazi-single">{result?.single_digit || "--"}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+const renderCustomerDailyResults = (game: "Kolkata Fatafat" | "Dus ka Dum") => {
+  const dates = Array.from(new Set(
+    customerResultRows
+      .filter((row) => row.game === game)
+      .map((row) => row.session_date)
+  )).sort((a, b) => b.localeCompare(a)).slice(0, 30);
+
+  return (
+    <section className="customer-result-panel">
+      {dates.length === 0 ? (
+        <div className="customer-result-empty">No result history available yet.</div>
+      ) : dates.map((date) => renderCustomerDailyResultCard(game, date))}
+    </section>
+  );
+};
+
+const renderResultPage = () => (
+  <>
+    {renderCustomerHeader()}
+    <main className="customer-main customer-result-page">
+      {renderCustomerNav()}
+      <div className="page-heading">
+        <div className="page-heading-title">Result History</div>
+        <div className="page-heading-sub">Latest declared game results</div>
+      </div>
+
+      <div className="customer-result-game-tabs">
+        {(["Main Bazar", "Kolkata Fatafat", "Dus ka Dum"] as GameName[]).map((game) => (
+          <button
+            key={game}
+            type="button"
+            className={customerResultGame === game ? "customer-result-game-tab active" : "customer-result-game-tab"}
+            onClick={() => setCustomerResultGame(game)}
+          >
+            {game}
+          </button>
+        ))}
+      </div>
+
+      {customerResultsLoading && customerResultRows.length === 0 ? (
+        <div className="customer-result-empty">Loading result history...</div>
+      ) : customerResultsError ? (
+        <div className="customer-result-empty">Unable to load result history.</div>
+      ) : customerResultGame === "Main Bazar" ? (
+        renderMainBazarResults()
+      ) : customerResultGame === "Kolkata Fatafat" ? (
+        renderCustomerDailyResults("Kolkata Fatafat")
+      ) : customerResultGame === "Dus ka Dum" ? (
+        renderCustomerDailyResults("Dus ka Dum")
+      ) : (
+        <div className="customer-result-empty">Select a game to view its result history.</div>
+      )}
+    </main>
+  </>
+);
 
 /* =========================================================
 
@@ -9173,6 +9455,15 @@ return renderHistoryPage();
 
 
 
+if (customerPage === "result") {
+
+
+return renderResultPage();
+
+
+}
+
+
 if (customerPage === "profile") {
 
 
@@ -12117,6 +12408,39 @@ text-align: center;
 
 
 
+
+/* ================= CUSTOMER RESULT HISTORY ================= */
+
+.customer-result-game-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:0 0 10px;}
+.customer-result-game-tab{min-height:36px;padding:7px 5px;border-radius:8px;border:1px solid #2b3440;background:#0b1016;color:#aeb4bd;font-size:8px;font-weight:900;cursor:pointer;}
+.customer-result-game-tab.active{color:#111;border-color:#ffc52a;background:linear-gradient(135deg,#ffe36a,#ffbd19);}
+.customer-result-panel{background:#f5f5f5;border:1px solid rgba(255,197,42,.65);border-radius:9px;overflow:hidden;margin-bottom:14px;}
+.customer-result-table-scroll{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.customer-result-main-table{min-width:560px;background:#f7dfbd;color:#111;}
+.customer-result-main-header,.customer-result-main-row{display:grid;grid-template-columns:110px repeat(5,minmax(90px,1fr));}
+.customer-result-main-header>div{min-height:48px;display:flex;align-items:center;justify-content:center;border-right:1px solid #2aa8b2;border-bottom:1px solid #2aa8b2;background:#ffc400;font-size:12px;font-weight:900;text-transform:uppercase;}
+.customer-result-main-row>div{min-height:102px;border-right:1px solid #36aeb8;border-bottom:1px solid #36aeb8;}
+.customer-result-week-date{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:5px;text-align:center;font-size:8px;font-weight:900;line-height:1.25;}
+.customer-result-week-date span:nth-child(2){font-size:7px;font-weight:700;}
+.customer-result-main-day{padding:0;background:#f8dfbc;}
+.customer-result-main-cell{min-height:102px;display:grid;grid-template-columns:24px 1fr 24px;align-items:center;justify-items:center;padding:4px 3px;box-sizing:border-box;}
+.customer-result-patti{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;min-height:58px;font-size:11px;font-weight:900;line-height:1.05;}
+.customer-result-patti span{display:block;}
+.customer-result-patti-left,.customer-result-patti-right{color:#111;}
+.customer-result-main-number{min-width:36px;display:flex;align-items:center;justify-content:center;gap:0;color:#111;font-size:21px;font-weight:900;line-height:1;letter-spacing:-1px;}
+.customer-result-main-number span{display:inline-block;}
+.customer-result-day-card{background:#f7dfbd;border-bottom:1px solid #39aeb8;}
+.customer-result-day-card:last-child{border-bottom:0;}
+.customer-result-day-title{padding:9px 10px;background:#ffc400;border-bottom:1px solid #2aa8b2;color:#111;font-size:10px;font-weight:900;text-align:left;}
+.customer-result-bazi-grid{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));}
+.customer-result-bazi-grid.dus-grid{grid-template-columns:repeat(10,minmax(0,1fr));}
+.customer-result-bazi-box{min-height:92px;padding:5px 3px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border-right:1px solid #39aeb8;box-sizing:border-box;}
+.customer-result-bazi-box:last-child{border-right:0;}
+.customer-result-bazi-label{color:#b07a00;font-size:7px;font-weight:900;}
+.customer-result-bazi-patti{color:#111;font-size:13px;font-weight:900;letter-spacing:.4px;}
+.customer-result-bazi-single{color:#111;font-size:20px;font-weight:900;line-height:1;}
+.customer-result-empty{padding:24px 12px;text-align:center;color:#777f89;font-size:9px;background:#f7f7f7;}
+@media (max-width:560px){.customer-result-game-tab{font-size:7px;}.customer-result-main-table{min-width:500px;}.customer-result-main-header,.customer-result-main-row{grid-template-columns:82px repeat(5,minmax(83px,1fr));}.customer-result-main-header>div{min-height:40px;font-size:9px;}.customer-result-main-row>div{min-height:88px;}.customer-result-main-cell{min-height:88px;grid-template-columns:20px 1fr 20px;}.customer-result-patti{font-size:9px;}.customer-result-main-number{font-size:18px;}.customer-result-week-date{font-size:7px;}.customer-result-bazi-box{min-height:82px;}.customer-result-bazi-label{font-size:6px;}.customer-result-bazi-patti{font-size:10px;}.customer-result-bazi-single{font-size:17px;}}
 
 /* ================= HISTORY ================= */
 
