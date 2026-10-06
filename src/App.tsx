@@ -1948,8 +1948,8 @@ const getKolkataHour = (date: Date = new Date()) => {
 
 const loadTodayGameResults = async () => {
   try {
-    const resultNow = new Date();
-    const resultTodayDate = getLocalDateString(resultNow);
+
+
     const { data, error } = await supabase.rpc("get_public_today_game_results");
     if (error) throw error;
 
