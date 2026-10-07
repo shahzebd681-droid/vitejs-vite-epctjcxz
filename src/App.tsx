@@ -1590,6 +1590,7 @@ const [customerName, setCustomerName] = useState("Customer");
 
 
 const [customerEmail, setCustomerEmail] = useState("");
+const [customerUsername, setCustomerUsername] = useState("");
 
 
 const [customerProfileId, setCustomerProfileId] = useState<string | null>(null);
@@ -2455,7 +2456,7 @@ const loadCustomerAccount = async (userId: string) => {
 try {
 const { data: profile, error: profileError } = await supabase
 .from("profiles")
-.select("id, role, full_name, mobile")
+.select("id, role, full_name, mobile, username")
 .eq("id", userId)
 .eq("role", "CUSTOMER")
 .maybeSingle();
@@ -2502,6 +2503,7 @@ throw new Error("Customer wallet is not active.");
 }
 
 setCustomerProfileId(profile.id);
+setCustomerUsername(String(profile.username || ""));
 setCustomerId(customer.id);
 setWalletId(wallet.id);
 setWalletBalance(Number(wallet.available_balance || 0));
@@ -2917,6 +2919,7 @@ const user = session?.user;
 if (!user) {
 setIsLoggedIn(false);
 setCustomerEmail("");
+setCustomerUsername("");
 setBetHistory([]);
 setStatement([]);
 setAuthReady(true);
@@ -3664,8 +3667,8 @@ const renderCustomerHeader = () => (
 </div>
 </div>
 <div className="customer-header-balances">
-  <div><span>WALLET</span><strong>${walletBalance.toFixed(2)}</strong></div>
   <div><span>EXPOSURE</span><strong>${exposureBalance.toFixed(2)}</strong></div>
+  <div><span>WALLET</span><strong>${walletBalance.toFixed(2)}</strong></div>
 </div>
 <div className="customer-header-actions">
 <button
@@ -3880,7 +3883,7 @@ openCustomerPage("history")
 >
 
 
-History
+Bet History
 
 
 </button>
@@ -4401,7 +4404,7 @@ const renderCustomerHome = () => (
       </div>
       <div className="customer-bottom-nav">
         <button onClick={() => openCustomerPage("home")}>Home</button>
-        <button onClick={() => openCustomerPage("history")}>History</button>
+        <button onClick={() => openCustomerPage("history")}>Bet History</button>
         <button onClick={() => openCustomerPage("result")}>Result</button>
       </div>
     </main>
@@ -4795,7 +4798,7 @@ return (
 
 
 
-<main className="customer-main">
+<main className="customer-main customer-betting-page">
 
 
 <div className="betting-topbar">
@@ -5610,7 +5613,7 @@ openCustomerPage(
 
     >
 
-     History
+     Bet History
 
 
      </button>
@@ -5733,7 +5736,7 @@ GO TO GAMES
 <tr>
 <th>Date &amp; Time</th>
 <th>Game</th>
-<th>Session</th>
+{/* Session column hidden as confirmed; data/logic remains untouched. */}
 <th>Bazi</th>
 <th>Bet Type</th>
 <th>Number / Patti / Jodi</th>
@@ -5752,7 +5755,7 @@ GO TO GAMES
 <div>{bet.time}</div>
 </td>
 <td className="history-table-game">{bet.game}</td>
-<td className="history-table-session">{bet.sessionCode === "-" ? "-" : bet.sessionCode.slice(-10)}</td>
+{/* Session ID hidden as confirmed; data/logic remains untouched. */}
 <td className="history-table-bazi">{bet.bazi}</td>
 <td className="history-table-bet-type">{bet.type}</td>
 <td className="history-table-number">{bet.number}</td>
@@ -5998,7 +6001,7 @@ const renderProfilePage = () => (
 
 {renderCustomerHeader()}
 
-<main className="customer-main">
+<main className="customer-main customer-profile-page">
 
 
  {renderBalanceBar()}
@@ -6060,6 +6063,11 @@ Customer Account
 
 Email: {customerEmail || "Not available"}
 
+
+</div>
+<div className="profile-mobile">
+
+Username: {customerUsername || "Not available"}
 
 </div>
 
@@ -6345,7 +6353,7 @@ openCustomerPage(
 )
 }
 >
-History
+Bet History
 </button>
 
 <button
@@ -16525,6 +16533,72 @@ color: #111;
   .amount-btn,.amount-btn.selected{width:64px;height:46px;min-height:46px;font-size:12px;}
   .selected-bets-list{max-height:355px;}
 }
+
+/* =========================================================
+   CUSTOMER UI — CONFIRMED MINIMAL PATCH
+   Only the six confirmed customer-interface changes.
+   ========================================================= */
+
+/* Header: Exposure left, Wallet right; keep height unchanged and widen only horizontally. */
+.customer-header-balances > div{
+  min-width:72px;
+}
+.customer-header-balances > div:first-child strong{
+  color:#ff6464;
+}
+.customer-header-balances > div:last-child strong{
+  color:#27ed82;
+}
+.customer-header-balances strong{
+  font-size:10.5px;
+}
+@media (max-width:560px){
+  .customer-header-balances > div{
+    min-width:68px;
+    padding-left:6px;
+    padding-right:6px;
+  }
+  .customer-header-balances strong{
+    font-size:10px;
+  }
+}
+@media (max-width:390px){
+  .customer-header-balances > div{
+    min-width:64px;
+  }
+}
+
+/* Profile: the header already shows Wallet/Exposure, so hide only the duplicate profile balance cards. */
+.customer-profile-page .balance-wrap{
+  display:none !important;
+}
+
+/* Betting: remove only the Back / Betting / balance strip below the header. */
+.customer-betting-page .betting-topbar{
+  display:none !important;
+}
+
+/* Bet History: redistribute the table width after removing Session. */
+.customer-history-page .history-table th:nth-child(1),
+.customer-history-page .history-table td:nth-child(1){width:15%;}
+.customer-history-page .history-table th:nth-child(2),
+.customer-history-page .history-table td:nth-child(2){width:12%;}
+.customer-history-page .history-table th:nth-child(3),
+.customer-history-page .history-table td:nth-child(3){width:7%;}
+.customer-history-page .history-table th:nth-child(4),
+.customer-history-page .history-table td:nth-child(4){width:10%;}
+.customer-history-page .history-table th:nth-child(5),
+.customer-history-page .history-table td:nth-child(5){width:14%;}
+.customer-history-page .history-table th:nth-child(6),
+.customer-history-page .history-table td:nth-child(6){width:10%;}
+.customer-history-page .history-table th:nth-child(7),
+.customer-history-page .history-table td:nth-child(7){width:6%;}
+.customer-history-page .history-table th:nth-child(8),
+.customer-history-page .history-table td:nth-child(8){width:8%;}
+.customer-history-page .history-table th:nth-child(9),
+.customer-history-page .history-table td:nth-child(9){width:9%;}
+.customer-history-page .history-table th:nth-child(10),
+.customer-history-page .history-table td:nth-child(10){width:9%;}
 `}
 </style>
 
