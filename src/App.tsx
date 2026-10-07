@@ -886,7 +886,6 @@ const [agentAllCustomers, setAgentAllCustomers] = useState<Array<{
 }>>([]);
 const [agentAllCustomerSearch, setAgentAllCustomerSearch] = useState("");
 const [agentAllCustomerPage, setAgentAllCustomerPage] = useState(1);
-const [selectedAgentCustomer, setSelectedAgentCustomer] = useState<any>(null);
 const [agentAllCustomerLoading, setAgentAllCustomerLoading] = useState(false);
 
 const [adminModule, setAdminModule] = useState<"HOME" | "ACCOUNT_OVERVIEW" | "ACCOUNT_DIRECTORY" | "AGENT_ADMIN" | "AGENT_WALLET" | "DEPOSIT_AGENT" | "WITHDRAW_AGENT" | "ONLINE_CUSTOMER" | "RESULTS" | "SETTLEMENT" | "BET_ANALYZER" | "REPORTS" | "AUDIT" | "CONTACT" | "PASSWORD_RESET">("HOME");
@@ -1048,7 +1047,6 @@ const [agentAuditSettlementRows, setAgentAuditSettlementRows] = useState<Array<{
 const [agentAuditSettlementPage, setAgentAuditSettlementPage] = useState(0);
 const [agentAuditSettlementHasNext, setAgentAuditSettlementHasNext] = useState(false);
 const [agentCustomerSearchTotal, setAgentCustomerSearchTotal] = useState(0);
-const [agentExposureRows, setAgentExposureRows] = useState<Array<{ id: string; username: string; customer_code: string; exposure_balance: number; available_balance: number; status: string }>>([]);
 const [agentReportsLoading, setAgentReportsLoading] = useState(false);
 const [agentReportsRows, setAgentReportsRows] = useState<Array<{
   id: string; bet_time: string; username: string; game_name: string; bazi_no: number | null;
@@ -1437,7 +1435,6 @@ const loadAgentAccountOverview = async () => {
       customerExposure,
       customers: Number(count || 0),
     });
-    setAgentExposureRows(exposureRows);
   } catch (error: any) {
     setAgentCustomerError(error?.message || String(error));
   }
