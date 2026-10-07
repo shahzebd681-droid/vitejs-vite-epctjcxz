@@ -1007,14 +1007,52 @@ const [allocationAmount, setAllocationAmount] = useState("");
 const [allocationNote, setAllocationNote] = useState("");
 
 // Agent Admin customer management
-const [agentDashboardModule, setAgentDashboardModule] = useState<"HOME" | "ACCOUNT_OVERVIEW" | "CUSTOMERS" | "CREATE_CUSTOMER" | "DEPOSIT_WITHDRAW" | "BET_HISTORY" | "EXPOSURE" | "PASSWORD_RESET">("HOME");
+const [agentDashboardModule, setAgentDashboardModule] = useState<"HOME" | "CUSTOMERS" | "CREATE_CUSTOMER" | "DEPOSIT_WITHDRAW" | "BET_HISTORY" | "BETTING_COMMISSION" | "AUDIT" | "PASSWORD_RESET">("HOME");
 const [agentOverviewStats, setAgentOverviewStats] = useState({ agentAvailable: 0, customerAvailable: 0, customerExposure: 0, customers: 0 });
+const [agentTodayBetting, setAgentTodayBetting] = useState(0);
+const [agentTodayBettingLoading, setAgentTodayBettingLoading] = useState(false);
+const [agentCommissionLoading, setAgentCommissionLoading] = useState(false);
+const [agentCommissionRows, setAgentCommissionRows] = useState<Array<{
+  commission_date: string;
+  total_betting: number;
+  commission_amount: number;
+  status: string;
+}>>([]);
+const [agentCommissionPage, setAgentCommissionPage] = useState(0);
+const [agentCommissionHasNext, setAgentCommissionHasNext] = useState(false);
+const [agentAuditView, setAgentAuditView] = useState<"HOME" | "TRANSACTION" | "SETTLEMENT">("HOME");
+const [agentAuditLoading, setAgentAuditLoading] = useState(false);
+const [agentAuditTransactionRows, setAgentAuditTransactionRows] = useState<Array<{
+  transaction_id: string;
+  transaction_code: string;
+  created_at: string;
+  username: string | null;
+  counterparty_type: string | null;
+  direction: string;
+  amount: number;
+  balance_after: number;
+}>>([]);
+const [agentAuditTransactionPage, setAgentAuditTransactionPage] = useState(0);
+const [agentAuditTransactionHasNext, setAgentAuditTransactionHasNext] = useState(false);
+const [agentAuditSettlementRows, setAgentAuditSettlementRows] = useState<Array<{
+  settlement_id: string;
+  settlement_code: string;
+  settled_at: string;
+  game_name: string;
+  bazi_label: string;
+  result_text: string;
+  settlement_amount: number;
+  network_change: number;
+  total_network_coins: number;
+}>>([]);
+const [agentAuditSettlementPage, setAgentAuditSettlementPage] = useState(0);
+const [agentAuditSettlementHasNext, setAgentAuditSettlementHasNext] = useState(false);
 const [agentCustomerSearchTotal, setAgentCustomerSearchTotal] = useState(0);
 const [agentExposureRows, setAgentExposureRows] = useState<Array<{ id: string; username: string; customer_code: string; exposure_balance: number; available_balance: number; status: string }>>([]);
 const [agentReportsLoading, setAgentReportsLoading] = useState(false);
 const [agentReportsRows, setAgentReportsRows] = useState<Array<{
-  id: string; bet_time: string; username: string; game_name: string; session_code: string; bazi_no: number | null;
-  market: string; bet_type: string; played_number: string; stake: number; rate: number; potential_win: number; result: string; status: string;
+  id: string; bet_time: string; username: string; game_name: string; bazi_no: number | null;
+  market: string; bet_type: string; played_number: string; stake: number; rate: number; result: string; status: string; won_amount: number;
 }>>([]);
 const [agentReportsPage, setAgentReportsPage] = useState(0);
 const [agentReportsTotal, setAgentReportsTotal] = useState(0);
@@ -2865,6 +2903,7 @@ if (profile.role === "SUPER_ADMIN") {
 if (profile.role === "AGENT_ADMIN") {
   setUserRole("AGENT_ADMIN");
   await loadAgentCustomerPage(1);
+  await loadAgentTodayBetting();
   return;
 }
 setUserRole("CUSTOMER");
@@ -6664,76 +6703,30 @@ const loadAgentBetHistory = async (page = 0) => {
   setAgentCustomerError("");
   try {
     const pageSize = 25;
-    const from = page * pageSize;
-    const to = from + pageSize - 1;
-    const { data: itemRows, error: itemError, count } = await supabase
-      .from("bet_items")
-      .select("id, bet_id, customer_id, session_id, bet_type, played_number, stake, rate, potential_win, status, created_at", { count: "exact" })
-      .order("created_at", { ascending: false })
-      .range(from, to);
-    if (itemError) throw itemError;
-    const rows = itemRows || [];
-    setAgentReportsTotal(Number(count || 0));
-    if (rows.length === 0) {
-      setAgentReportsRows([]);
-      setAgentReportsPage(page);
-      return;
-    }
-
-    const betIds = [...new Set(rows.map((row: any) => row.bet_id).filter(Boolean))];
-    const customerIds = [...new Set(rows.map((row: any) => row.customer_id).filter(Boolean))];
-    const sessionIds = [...new Set(rows.map((row: any) => row.session_id).filter(Boolean))];
-    const [betResult, customerResult, sessionResult, resultResult] = await Promise.all([
-      betIds.length ? supabase.from("bets").select("id, customer_id, agent_id, session_id").in("id", betIds) : Promise.resolve({ data: [], error: null }),
-      customerIds.length ? supabase.from("customers").select("id, profile_id, agent_id").in("id", customerIds) : Promise.resolve({ data: [], error: null }),
-      sessionIds.length ? supabase.from("game_sessions").select("id, session_code, game_id, session_date, bazi_no, market").in("id", sessionIds) : Promise.resolve({ data: [], error: null }),
-      sessionIds.length ? supabase.from("results").select("session_id, single_digit, patti, status, is_current").in("session_id", sessionIds).eq("is_current", true).eq("status", "DECLARED") : Promise.resolve({ data: [], error: null }),
-    ]);
-    if (betResult.error) throw betResult.error;
-    if (customerResult.error) throw customerResult.error;
-    if (sessionResult.error) throw sessionResult.error;
-    if (resultResult.error) throw resultResult.error;
-
-    const customers = customerResult.data || [];
-    const sessions = sessionResult.data || [];
-    const results = resultResult.data || [];
-    const profileIds = customers.map((row: any) => row.profile_id).filter(Boolean);
-    const gameIds = [...new Set(sessions.map((row: any) => row.game_id).filter(Boolean))];
-    const [profileResult, gameResult] = await Promise.all([
-      profileIds.length ? supabase.from("profiles").select("id, username").in("id", profileIds) : Promise.resolve({ data: [], error: null }),
-      gameIds.length ? supabase.from("games").select("id, game_name").in("id", gameIds) : Promise.resolve({ data: [], error: null }),
-    ]);
-    if (profileResult.error) throw profileResult.error;
-    if (gameResult.error) throw gameResult.error;
-
-    const profileMap = new Map((profileResult.data || []).map((row: any) => [String(row.id), String(row.username || "")]));
-    const customerMap = new Map(customers.map((row: any) => [String(row.id), row]));
-    const sessionMap = new Map(sessions.map((row: any) => [String(row.id), row]));
-    const resultMap = new Map(results.map((row: any) => [String(row.session_id), row]));
-    const gameMap = new Map((gameResult.data || []).map((row: any) => [String(row.id), String(row.game_name || "Game")]));
-
-    setAgentReportsRows(rows.map((row: any) => {
-      const customer = customerMap.get(String(row.customer_id));
-      const session = sessionMap.get(String(row.session_id));
-      const result = session ? resultMap.get(String(session.id)) : null;
-      return {
-        id: String(row.id),
-        bet_time: String(row.created_at || ""),
-        username: profileMap.get(String(customer?.profile_id || "")) || "-",
-        game_name: gameMap.get(String(session?.game_id || "")) || "Game",
-        session_code: String(session?.session_code || "-"),
-        bazi_no: session?.bazi_no == null ? null : Number(session.bazi_no),
-        market: String(session?.market || "-"),
-        bet_type: String(row.bet_type || "-"),
-        played_number: String(row.played_number ?? "-"),
-        stake: Number(row.stake || 0),
-        rate: Number(row.rate || 0),
-        potential_win: Number(row.potential_win || 0),
-        result: result ? `${String(result.single_digit || "-")} - ${String(result.patti || "-")}` : "-",
-        status: String(row.status || "-"),
-      };
-    }));
-    setAgentReportsPage(page);
+    const { data, error } = await supabase.rpc("get_agent_bet_history_rows", {
+      p_limit: pageSize,
+      p_offset: Math.max(0, page) * pageSize,
+    });
+    if (error) throw error;
+    const rows = Array.isArray(data) ? data : [];
+    const total = rows.length ? Number(rows[0]?.total_count || 0) : 0;
+    setAgentReportsTotal(total);
+    setAgentReportsRows(rows.map((row: any) => ({
+      id: String(row.bet_item_id),
+      bet_time: String(row.created_at || ""),
+      username: String(row.customer_username || "-"),
+      game_name: String(row.game_name || "Game"),
+      bazi_no: row.bazi_no == null ? null : Number(row.bazi_no),
+      market: String(row.market || "-"),
+      bet_type: String(row.bet_type || "-"),
+      played_number: String(row.played_number ?? "-"),
+      stake: Number(row.stake || 0),
+      rate: Number(row.rate || 0),
+      result: String(row.result_text || "-"),
+      status: String(row.display_status || "-"),
+      won_amount: Number(row.won_amount || 0),
+    })));
+    setAgentReportsPage(Math.max(0, page));
   } catch (error: any) {
     setAgentReportsRows([]);
     setAgentReportsTotal(0);
@@ -6743,6 +6736,155 @@ const loadAgentBetHistory = async (page = 0) => {
   }
 };
 
+const loadAgentTodayBetting = async () => {
+  if (agentTodayBettingLoading) return;
+  setAgentTodayBettingLoading(true);
+  try {
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError) throw userError;
+    const callerId = userData.user?.id;
+    if (!callerId) throw new Error("Agent Admin session is missing. Please log in again.");
+
+    const { data: agent, error: agentError } = await supabase
+      .from("agents")
+      .select("id")
+      .eq("profile_id", callerId)
+      .eq("status", "ACTIVE")
+      .maybeSingle();
+    if (agentError) throw agentError;
+    if (!agent?.id) throw new Error("Active Agent Admin record was not found.");
+
+    const { data: customers, error: customerError } = await supabase
+      .from("customers")
+      .select("id")
+      .eq("agent_id", agent.id)
+      .is("deleted_at", null);
+    if (customerError) throw customerError;
+
+    const customerIds = (customers || []).map((row: any) => String(row.id)).filter(Boolean);
+    if (!customerIds.length) {
+      setAgentTodayBetting(0);
+      return;
+    }
+
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+
+    const { data: betRows, error: betError } = await supabase
+      .from("bet_items")
+      .select("stake")
+      .in("customer_id", customerIds)
+      .gte("created_at", start.toISOString())
+      .lt("created_at", end.toISOString());
+
+    if (betError) throw betError;
+
+    const total = (betRows || []).reduce((sum: number, row: any) => sum + Number(row.stake || 0), 0);
+    setAgentTodayBetting(total);
+  } catch (error: any) {
+    console.error("=== AGENT TODAY BETTING LOAD ERROR ===", error);
+    setAgentTodayBetting(0);
+  } finally {
+    setAgentTodayBettingLoading(false);
+  }
+};
+
+const loadAgentBettingCommission = async (page = 0) => {
+  if (agentCommissionLoading) return;
+  setAgentCommissionLoading(true);
+  setAgentCustomerError("");
+  try {
+    const pageSize = 25;
+    const { data, error } = await supabase.rpc("get_agent_betting_commission_rows", {
+      p_limit: pageSize + 1,
+      p_offset: Math.max(0, page) * pageSize,
+    });
+    if (error) throw error;
+    const rows = Array.isArray(data) ? data : [];
+    setAgentCommissionHasNext(rows.length > pageSize);
+    setAgentCommissionRows(rows.slice(0, pageSize).map((row: any) => ({
+      commission_date: String(row.commission_date || ""),
+      total_betting: Number(row.total_betting || 0),
+      commission_amount: Number(row.commission_amount || 0),
+      status: String(row.status || "PENDING"),
+    })));
+    setAgentCommissionPage(Math.max(0, page));
+  } catch (error: any) {
+    setAgentCommissionRows([]);
+    setAgentCommissionHasNext(false);
+    setAgentCustomerError(error?.message || String(error));
+  } finally {
+    setAgentCommissionLoading(false);
+  }
+};
+
+const loadAgentAuditTransactions = async (page = 0) => {
+  if (agentAuditLoading) return;
+  setAgentAuditLoading(true);
+  setAgentCustomerError("");
+  try {
+    const pageSize = 25;
+    const { data, error } = await supabase.rpc("get_agent_audit_transaction_rows", {
+      p_limit: pageSize + 1,
+      p_offset: Math.max(0, page) * pageSize,
+    });
+    if (error) throw error;
+    const rows = Array.isArray(data) ? data : [];
+    setAgentAuditTransactionHasNext(rows.length > pageSize);
+    setAgentAuditTransactionRows(rows.slice(0, pageSize).map((row: any) => ({
+      transaction_id: String(row.transaction_id),
+      transaction_code: String(row.transaction_code || "-"),
+      created_at: String(row.created_at || ""),
+      username: row.username == null ? null : String(row.username),
+      counterparty_type: row.counterparty_type == null ? null : String(row.counterparty_type),
+      direction: String(row.direction || "-"),
+      amount: Number(row.amount || 0),
+      balance_after: Number(row.balance_after ?? 0),
+    })));
+    setAgentAuditTransactionPage(Math.max(0, page));
+  } catch (error: any) {
+    setAgentAuditTransactionRows([]);
+    setAgentAuditTransactionHasNext(false);
+    setAgentCustomerError(error?.message || String(error));
+  } finally {
+    setAgentAuditLoading(false);
+  }
+};
+
+const loadAgentAuditSettlements = async (page = 0) => {
+  if (agentAuditLoading) return;
+  setAgentAuditLoading(true);
+  setAgentCustomerError("");
+  try {
+    const pageSize = 25;
+    const { data, error } = await supabase.rpc("get_agent_audit_settlement_rows", {
+      p_limit: pageSize + 1,
+      p_offset: Math.max(0, page) * pageSize,
+    });
+    if (error) throw error;
+    const rows = Array.isArray(data) ? data : [];
+    setAgentAuditSettlementHasNext(rows.length > pageSize);
+    setAgentAuditSettlementRows(rows.slice(0, pageSize).map((row: any) => ({
+      settlement_id: String(row.settlement_id),
+      settlement_code: String(row.settlement_code || "-"),
+      settled_at: String(row.settled_at || ""),
+      game_name: String(row.game_name || "-"),
+      bazi_label: String(row.bazi_label || "-"),
+      result_text: String(row.result_text || "-"),
+      settlement_amount: Number(row.settlement_amount || 0),
+      network_change: Number(row.network_change || 0),
+      total_network_coins: Number(row.total_network_coins ?? 0),
+    })));
+    setAgentAuditSettlementPage(Math.max(0, page));
+  } catch (error: any) {
+    setAgentAuditSettlementRows([]);
+    setAgentAuditSettlementHasNext(false);
+    setAgentCustomerError(error?.message || String(error));
+  } finally {
+    setAgentAuditLoading(false);
+  }
+};
 const resetAgentCustomerPassword = async () => {
   setAgentCustomerError("");
   setAgentCustomerSuccess("");
@@ -9230,15 +9372,16 @@ const renderAgentAdminArea = () => {
       setAgentAllCustomerPage(1);
       void loadAgentAllCustomerAccounts(1, "");
     }
-    if (module === "ACCOUNT_OVERVIEW") {
-      void loadAgentAccountOverview();
-    }
     if (module === "BET_HISTORY") {
       setAgentReportsPage(0);
       void loadAgentBetHistory(0);
     }
-    if (module === "EXPOSURE") {
-      void loadAgentAccountOverview();
+    if (module === "BETTING_COMMISSION") {
+      setAgentCommissionPage(0);
+      void loadAgentBettingCommission(0);
+    }
+    if (module === "AUDIT") {
+      setAgentAuditView("HOME");
     }
   };
 
@@ -9270,13 +9413,20 @@ const renderAgentAdminArea = () => {
                 void loadAgentBetHistory(agentReportsPage);
               } else if (agentDashboardModule === "CUSTOMERS") {
                 void loadAgentAllCustomerAccounts(currentCustomerPage, agentAllCustomerSearch);
+              } else if (agentDashboardModule === "BETTING_COMMISSION") {
+                void loadAgentBettingCommission(agentCommissionPage);
+              } else if (agentDashboardModule === "AUDIT") {
+                if (agentAuditView === "TRANSACTION") void loadAgentAuditTransactions(agentAuditTransactionPage);
+                else if (agentAuditView === "SETTLEMENT") void loadAgentAuditSettlements(agentAuditSettlementPage);
+                else void loadAgentCustomerPage(agentCustomerPage);
               } else {
                 void loadAgentCustomerPage(agentCustomerPage);
+                void loadAgentTodayBetting();
               }
             }}
-            disabled={agentCustomerLoading || agentAllCustomerLoading || agentReportsLoading}
+            disabled={agentCustomerLoading || agentAllCustomerLoading || agentReportsLoading || agentCommissionLoading || agentAuditLoading || agentTodayBettingLoading}
           >
-            {agentCustomerLoading || agentAllCustomerLoading || agentReportsLoading ? "LOADING..." : "REFRESH"}
+            {agentCustomerLoading || agentAllCustomerLoading || agentReportsLoading || agentCommissionLoading || agentAuditLoading || agentTodayBettingLoading ? "LOADING..." : "REFRESH"}
           </button>
         </section>
 
@@ -9292,12 +9442,17 @@ const renderAgentAdminArea = () => {
               <div className="admin-stat-card"><span>CUSTOMER EXPOSURE</span><strong className="admin-exposure-value">${agentOverviewStats.customerExposure.toFixed(2)}</strong></div>
             </section>
 
+            <section className="agent-today-betting-card">
+              <div>
+                <div className="agent-today-kicker">TODAY'S BETTING</div>
+                <div className="agent-today-label">Total betting by your customers today</div>
+              </div>
+              <strong>{agentTodayBettingLoading ? "LOADING..." : `$${agentTodayBetting.toFixed(2)}`}</strong>
+            </section>
+
             <section className="admin-module-grid admin-home-modules">
-              <button className="admin-module-card" type="button" onClick={() => openAgentModule("ACCOUNT_OVERVIEW")}>
-                <b>Account Overview</b><small>Agent balance, customer balance & exposure</small>
-              </button>
               <button className="admin-module-card" type="button" onClick={() => openAgentModule("CUSTOMERS")}>
-                <b>Customer Accounts</b><small>View only your customers, search & manage accounts</small>
+                <b>Customer Accounts</b><small>View only your customers, wallet balances, exposure & status</small>
               </button>
               <button className="admin-module-card" type="button" onClick={() => openAgentModule("CREATE_CUSTOMER")}>
                 <b>Create Customer</b><small>Create a new customer under this Agent</small>
@@ -9308,29 +9463,19 @@ const renderAgentAdminArea = () => {
               <button className="admin-module-card" type="button" onClick={() => openAgentModule("BET_HISTORY")}>
                 <b>Bet History</b><small>Only your customers' betting activity — 25 per page</small>
               </button>
-              <button className="admin-module-card" type="button" onClick={() => openAgentModule("EXPOSURE")}>
-                <b>Exposure</b><small>Customer exposure and available balance details</small>
+              <button className="admin-module-card" type="button" onClick={() => openAgentModule("BETTING_COMMISSION")}>
+                <b>Betting Commission</b><small>Date-wise total betting and 8% commission history</small>
+              </button>
+              <button className="admin-module-card" type="button" onClick={() => openAgentModule("AUDIT")}>
+                <b>Audit</b><small>Transaction and settlement audit for your Agent network</small>
               </button>
               <button className="admin-module-card" type="button" onClick={() => { setAgentDashboardModule("PASSWORD_RESET"); setAgentCoinModule("OVERVIEW"); setAdminPasswordResetTarget(""); setAdminPasswordResetPassword(""); setAgentCustomerError(""); setAgentCustomerSuccess(""); }}>
                 <b>Password Reset</b><small>Own password change or Customer password reset</small>
               </button>
             </section>
           </>
-        ) : agentDashboardModule === "ACCOUNT_OVERVIEW" ? (
-          <section className="admin-panel-card">
-            <div className="admin-panel-title-row">
-              <div className="admin-panel-title">ACCOUNT OVERVIEW</div>
-              <button className="admin-small-action" type="button" onClick={() => setAgentDashboardModule("HOME")}>BACK</button>
-            </div>
-            <div className="admin-stat-grid">
-              <div className="admin-stat-card"><span>AGENT AVAILABLE BALANCE</span><strong className="admin-available-value">${agentOverviewStats.agentAvailable.toFixed(2)}</strong></div>
-              <div className="admin-stat-card"><span>CUSTOMER AVAILABLE BALANCE</span><strong className="admin-available-value">${agentOverviewStats.customerAvailable.toFixed(2)}</strong></div>
-              <div className="admin-stat-card"><span>CUSTOMER EXPOSURE BALANCE</span><strong className="admin-exposure-value">${agentOverviewStats.customerExposure.toFixed(2)}</strong></div>
-              <div className="admin-stat-card"><span>TOTAL CUSTOMERS</span><strong>{agentOverviewStats.customers}</strong></div>
-            </div>
-          </section>
         ) : agentDashboardModule === "CUSTOMERS" ? (
-          <section className="admin-panel-card">
+          <section className="admin-panel-card agent-light-panel">
             <div className="admin-panel-title-row">
               <div>
                 <div className="admin-section-kicker">CUSTOMER MANAGEMENT</div>
@@ -9349,52 +9494,155 @@ const renderAgentAdminArea = () => {
                 placeholder="Search your customer username..."
                 maxLength={50}
               />
-              <button
-                type="button"
-                className="admin-small-action"
-                onClick={() => { setAgentAllCustomerPage(1); void loadAgentAllCustomerAccounts(1, agentAllCustomerSearch); }}
-                disabled={agentAllCustomerLoading}
-              >
+              <button type="button" className="admin-small-action" onClick={() => { setAgentAllCustomerPage(1); void loadAgentAllCustomerAccounts(1, agentAllCustomerSearch); }} disabled={agentAllCustomerLoading}>
                 {agentAllCustomerLoading ? "SEARCHING..." : "SEARCH"}
               </button>
             </div>
 
             {agentAllCustomerLoading ? <div className="admin-empty">LOADING CUSTOMER ACCOUNTS...</div> : agentAllCustomers.length === 0 ? <div className="admin-empty">No customer accounts found.</div> : (
               <>
-                <div className="admin-agent-list">
-                  {agentAllCustomers.map((c) => (
-                    <div className="admin-agent-row" key={c.id} style={{ alignItems: "flex-start", flexWrap: "wrap" }}>
-                      <div style={{ flex: 1, minWidth: "170px" }}>
-                        <b>{c.username || c.customer_code}</b>
-                        <small>{c.full_name || "Name not available"} • {c.customer_code}</small>
-                        <small>Available $ {c.available_balance.toFixed(2)} • Exposure $ {c.exposure_balance.toFixed(2)}</small>
-                      </div>
-                      <div style={{ display: "flex", gap: "5px", flexWrap: "wrap", justifyContent: "flex-end" }}>
-                        <span className={`admin-status ${c.status === "ACTIVE" ? "active" : ""}`}>{c.status === "BLOCKED" ? "PAUSED" : c.status}</span>
-                        <button type="button" className="admin-small-action" onClick={() => setSelectedAgentCustomer(c)}>VIEW</button>
-                        <button type="button" className="admin-small-action" onClick={() => void setAgentCustomerAccountStatus(c)} disabled={agentAllCustomerLoading}>{c.status === "BLOCKED" ? "RESUME CUSTOMER" : "PAUSE CUSTOMER"}</button>
-                      </div>
-                    </div>
-                  ))}
+                <div className="agent-light-table-scroll">
+                  <table className="agent-light-table">
+                    <thead>
+                      <tr><th>NO.</th><th>USERNAME</th><th>AVAILABLE WALLET</th><th>EXPOSURE</th><th>STATUS</th><th>ACTION</th></tr>
+                    </thead>
+                    <tbody>
+                      {agentAllCustomers.map((c, index) => {
+                        const rowNo = (currentCustomerPage - 1) * 25 + index + 1;
+                        const paused = c.status === "BLOCKED";
+                        return (
+                          <tr key={c.id}>
+                            <td>{rowNo}</td>
+                            <td><strong>{c.username || c.customer_code}</strong></td>
+                            <td>${c.available_balance.toFixed(2)}</td>
+                            <td>${c.exposure_balance.toFixed(2)}</td>
+                            <td><span className={`agent-light-status ${paused ? "paused" : "active"}`}>{paused ? "PAUSED" : "ACTIVE"}</span></td>
+                            <td><button type="button" className="agent-table-action" onClick={() => void setAgentCustomerAccountStatus(c)} disabled={agentAllCustomerLoading}>{paused ? "RESUME" : "PAUSE"}</button></td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
-                {selectedAgentCustomer ? (
-                  <div className="admin-wallet-result-row" style={{ marginTop: "10px" }}>
-                    <div><b>{selectedAgentCustomer.username}</b><small>{selectedAgentCustomer.customer_code} • {selectedAgentCustomer.email || "Email not available"}</small></div>
-                    <div className="admin-wallet-result-balances">
-                      <span>Available <strong className="admin-available-value">${Number(selectedAgentCustomer.available_balance || 0).toFixed(2)}</strong></span>
-                      <span>Exposure <strong className="admin-exposure-value">${Number(selectedAgentCustomer.exposure_balance || 0).toFixed(2)}</strong></span>
-                      <span>Status <strong>{selectedAgentCustomer.status === "BLOCKED" ? "PAUSED" : selectedAgentCustomer.status}</strong></span>
-                    </div>
-                  </div>
-                ) : null}
-                {customerPageCount > 1 ? (
-                  <div className="admin-pagination">
-                    <button className="admin-small-action" disabled={currentCustomerPage <= 1 || agentAllCustomerLoading} onClick={() => void loadAgentAllCustomerAccounts(currentCustomerPage - 1, agentAllCustomerSearch)}>PREVIOUS</button>
-                    <span>PAGE {currentCustomerPage} / {customerPageCount}</span>
-                    <button className="admin-small-action" disabled={currentCustomerPage >= customerPageCount || agentAllCustomerLoading} onClick={() => void loadAgentAllCustomerAccounts(currentCustomerPage + 1, agentAllCustomerSearch)}>NEXT</button>
-                  </div>
-                ) : null}
+                <div className="admin-pagination">
+                  <button className="admin-small-action" disabled={currentCustomerPage <= 1 || agentAllCustomerLoading} onClick={() => void loadAgentAllCustomerAccounts(currentCustomerPage - 1, agentAllCustomerSearch)}>PREVIOUS</button>
+                  <span>PAGE {currentCustomerPage} / {customerPageCount} • SHOWING {agentAllCustomers.length} OF {agentCustomerSearchTotal}</span>
+                  <button className="admin-small-action" disabled={currentCustomerPage >= customerPageCount || agentAllCustomerLoading} onClick={() => void loadAgentAllCustomerAccounts(currentCustomerPage + 1, agentAllCustomerSearch)}>NEXT</button>
+                </div>
               </>
+            )}
+          </section>
+        ) : agentDashboardModule === "DEPOSIT_WITHDRAW" ? (
+          <section className="admin-panel-card">
+            <div className="admin-panel-title-row">
+              <div><div className="admin-section-kicker">CUSTOMER WALLET CONTROL</div><div className="admin-panel-title">DEPOSIT / WITHDRAWAL</div></div>
+              <button className="admin-small-action" type="button" onClick={() => { setAgentDashboardModule("HOME"); setAgentCoinModule("OVERVIEW"); }}>BACK</button>
+            </div>
+            {agentCoinModule === "OVERVIEW" ? (
+              <div className="admin-module-grid">
+                <button className="admin-module-card" type="button" onClick={() => setAgentCoinModule("DEPOSIT_CUSTOMER")}><b>Deposit</b><small>Send virtual USD from Agent to Customer</small></button>
+                <button className="admin-module-card" type="button" onClick={() => setAgentCoinModule("WITHDRAW_CUSTOMER")}><b>Withdrawal</b><small>Return virtual USD from Customer to Agent</small></button>
+              </div>
+            ) : renderAgentCustomerCoinModule()}
+          </section>
+        ) : agentDashboardModule === "BET_HISTORY" ? (
+          <section className="admin-panel-card agent-light-panel">
+            <div className="admin-panel-title-row">
+              <div><div className="admin-section-kicker">BETTING REPORT</div><div className="admin-panel-title">BET HISTORY</div></div>
+              <button className="admin-small-action" type="button" onClick={() => setAgentDashboardModule("HOME")}>BACK</button>
+            </div>
+            <div className="agent-light-table-scroll">
+              {agentReportsLoading ? <div className="admin-empty">LOADING BET HISTORY...</div> : agentReportsRows.length === 0 ? <div className="admin-empty">No betting entries found.</div> : (
+                <table className="agent-light-table agent-bet-history-table">
+                  <thead><tr><th>DATE & TIME</th><th>CUSTOMER USERNAME</th><th>GAME</th><th>BAZI</th><th>BET TYPE</th><th>NUMBER / PATTI / JODI</th><th>AMOUNT</th><th>RATE</th><th>RESULT</th><th>STATUS</th><th>WON AMOUNT</th></tr></thead>
+                  <tbody>
+                    {agentReportsRows.map((row) => {
+                      const won = row.status === "WON";
+                      return (
+                        <tr key={row.id}>
+                          <td>{row.bet_time ? new Date(row.bet_time).toLocaleString() : "-"}</td>
+                          <td><strong>{row.username}</strong></td>
+                          <td>{row.game_name}</td>
+                          <td>{row.bazi_no ?? "-"}</td>
+                          <td>{row.bet_type}</td>
+                          <td>{row.played_number}</td>
+                          <td>${row.stake.toFixed(2)}</td>
+                          <td>{row.rate}X</td>
+                          <td>{row.result}</td>
+                          <td><span className={`agent-light-status ${row.status === "ACTIVE" ? "active" : row.status === "WON" ? "won" : row.status === "LOST" ? "lost" : ""}`}>{row.status}</span></td>
+                          <td>{won ? `$${row.won_amount.toFixed(2)}` : "$0.00"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            {agentReportsTotal > 0 ? <div className="admin-pagination"><button className="admin-small-action" disabled={agentReportsPage <= 0 || agentReportsLoading} onClick={() => void loadAgentBetHistory(agentReportsPage - 1)}>PREVIOUS</button><span>PAGE {agentReportsPage + 1} OF {Math.max(1, Math.ceil(agentReportsTotal / 25))} • SHOWING {agentReportsRows.length} OF {agentReportsTotal}</span><button className="admin-small-action" disabled={agentReportsLoading} onClick={() => void loadAgentBetHistory(agentReportsPage + 1)}>NEXT</button></div> : null}
+          </section>
+        ) : agentDashboardModule === "BETTING_COMMISSION" ? (
+          <section className="admin-panel-card agent-light-panel">
+            <div className="admin-panel-title-row">
+              <div><div className="admin-section-kicker">DAILY COMMISSION</div><div className="admin-panel-title">BETTING COMMISSION</div></div>
+              <button className="admin-small-action" type="button" onClick={() => setAgentDashboardModule("HOME")}>BACK</button>
+            </div>
+            <div className="agent-light-table-scroll">
+              {agentCommissionLoading ? <div className="admin-empty">LOADING COMMISSION HISTORY...</div> : agentCommissionRows.length === 0 ? <div className="admin-empty">No commission history found.</div> : (
+                <table className="agent-light-table">
+                  <thead><tr><th>DATE</th><th>TOTAL BETTING</th><th>8% COMMISSION</th><th>STATUS</th></tr></thead>
+                  <tbody>{agentCommissionRows.map((row) => <tr key={row.commission_date}><td>{row.commission_date}</td><td>${row.total_betting.toFixed(2)}</td><td>${row.commission_amount.toFixed(2)}</td><td><span className="agent-light-status pending">{row.status || "PENDING"}</span></td></tr>)}</tbody>
+                </table>
+              )}
+            </div>
+            <div className="admin-pagination">
+              <button className="admin-small-action" disabled={agentCommissionPage <= 0 || agentCommissionLoading} onClick={() => void loadAgentBettingCommission(agentCommissionPage - 1)}>PREVIOUS</button>
+              <span>PAGE {agentCommissionPage + 1}</span>
+              <button className="admin-small-action" disabled={!agentCommissionHasNext || agentCommissionLoading} onClick={() => void loadAgentBettingCommission(agentCommissionPage + 1)}>NEXT</button>
+            </div>
+          </section>
+        ) : agentDashboardModule === "AUDIT" ? (
+          <section className="admin-panel-card agent-light-panel">
+            <div className="admin-panel-title-row">
+              <div><div className="admin-section-kicker">AGENT NETWORK CONTROL</div><div className="admin-panel-title">AUDIT</div></div>
+              <button className="admin-small-action" type="button" onClick={() => { setAgentDashboardModule("HOME"); setAgentAuditView("HOME"); }}>BACK</button>
+            </div>
+            {agentAuditView === "HOME" ? (
+              <div className="admin-module-grid">
+                <button className="admin-module-card" type="button" onClick={() => { setAgentAuditView("TRANSACTION"); void loadAgentAuditTransactions(0); }}><b>Transaction</b><small>Agent coin movements and balance after each transaction</small></button>
+                <button className="admin-module-card" type="button" onClick={() => { setAgentAuditView("SETTLEMENT"); void loadAgentAuditSettlements(0); }}><b>Settlement</b><small>Customer-network settlement impact and total network coins</small></button>
+              </div>
+            ) : agentAuditView === "TRANSACTION" ? (
+              <div>
+                <div className="admin-panel-title-row">
+                  <div className="admin-panel-title">TRANSACTION AUDIT</div>
+                  <button className="admin-small-action" type="button" onClick={() => setAgentAuditView("HOME")}>BACK</button>
+                </div>
+                <div className="agent-light-table-scroll">
+                  {agentAuditLoading ? <div className="admin-empty">LOADING TRANSACTION AUDIT...</div> : agentAuditTransactionRows.length === 0 ? <div className="admin-empty">No transactions found.</div> : (
+                    <table className="agent-light-table">
+                      <thead><tr><th>DATE & TIME</th><th>COUNTERPARTY</th><th>DIRECTION</th><th>AMOUNT</th><th>BALANCE AFTER</th><th>TRANSACTION</th></tr></thead>
+                      <tbody>{agentAuditTransactionRows.map((row) => <tr key={row.transaction_id}><td>{row.created_at ? new Date(row.created_at).toLocaleString() : "-"}</td><td>{row.username || row.counterparty_type || "-"}</td><td><span className={row.direction.toUpperCase() === "CREDIT" ? "agent-audit-credit" : "agent-audit-debit"}>{row.direction}</span></td><td>${row.amount.toFixed(2)}</td><td>${row.balance_after.toFixed(2)}</td><td>{row.transaction_code}</td></tr>)}</tbody>
+                    </table>
+                  )}
+                </div>
+                <div className="admin-pagination"><button className="admin-small-action" disabled={agentAuditTransactionPage <= 0 || agentAuditLoading} onClick={() => void loadAgentAuditTransactions(agentAuditTransactionPage - 1)}>PREVIOUS</button><span>PAGE {agentAuditTransactionPage + 1}</span><button className="admin-small-action" disabled={!agentAuditTransactionHasNext || agentAuditLoading} onClick={() => void loadAgentAuditTransactions(agentAuditTransactionPage + 1)}>NEXT</button></div>
+              </div>
+            ) : (
+              <div>
+                <div className="admin-panel-title-row">
+                  <div className="admin-panel-title">SETTLEMENT AUDIT</div>
+                  <button className="admin-small-action" type="button" onClick={() => setAgentAuditView("HOME")}>BACK</button>
+                </div>
+                <div className="agent-light-table-scroll">
+                  {agentAuditLoading ? <div className="admin-empty">LOADING SETTLEMENT AUDIT...</div> : agentAuditSettlementRows.length === 0 ? <div className="admin-empty">No settlement entries found.</div> : (
+                    <table className="agent-light-table">
+                      <thead><tr><th>DATE & TIME</th><th>GAME</th><th>BAZI / SESSION</th><th>RESULT</th><th>SETTLEMENT / BET AMOUNT</th><th>NETWORK CHANGE</th><th>TOTAL NETWORK COINS</th></tr></thead>
+                      <tbody>{agentAuditSettlementRows.map((row) => { const positive = row.network_change > 0; return <tr key={row.settlement_id}><td>{row.settled_at ? new Date(row.settled_at).toLocaleString() : "-"}</td><td>{row.game_name}</td><td>{row.bazi_label}</td><td>{row.result_text}</td><td>${row.settlement_amount.toFixed(2)}</td><td><span className={positive ? "agent-audit-credit" : "agent-audit-debit"}>{positive ? "PLUS" : "MINUS"} ${Math.abs(row.network_change).toFixed(2)}</span></td><td>${row.total_network_coins.toFixed(2)}</td></tr>; })}</tbody>
+                    </table>
+                  )}
+                </div>
+                <div className="admin-pagination"><button className="admin-small-action" disabled={agentAuditSettlementPage <= 0 || agentAuditLoading} onClick={() => void loadAgentAuditSettlements(agentAuditSettlementPage - 1)}>PREVIOUS</button><span>PAGE {agentAuditSettlementPage + 1}</span><button className="admin-small-action" disabled={!agentAuditSettlementHasNext || agentAuditLoading} onClick={() => void loadAgentAuditSettlements(agentAuditSettlementPage + 1)}>NEXT</button></div>
+              </div>
             )}
           </section>
         ) : agentDashboardModule === "CREATE_CUSTOMER" ? (
@@ -9412,47 +9660,6 @@ const renderAgentAdminArea = () => {
               <div className="admin-form-note">Customer will be created under this Agent Admin. Email is optional; username and password are required.</div>
               <button className="admin-create-btn" type="button" onClick={createAgentCustomer} disabled={agentCustomerLoading}>{agentCustomerLoading ? "CREATING..." : "CREATE CUSTOMER"}</button>
             </div>
-          </section>
-        ) : agentDashboardModule === "DEPOSIT_WITHDRAW" ? (
-          <section className="admin-panel-card">
-            <div className="admin-panel-title-row">
-              <div><div className="admin-section-kicker">CUSTOMER WALLET CONTROL</div><div className="admin-panel-title">DEPOSIT / WITHDRAWAL</div></div>
-              <button className="admin-small-action" type="button" onClick={() => { setAgentDashboardModule("HOME"); setAgentCoinModule("OVERVIEW"); }}>BACK</button>
-            </div>
-            {agentCoinModule === "OVERVIEW" ? (
-              <div className="admin-module-grid">
-                <button className="admin-module-card" type="button" onClick={() => setAgentCoinModule("DEPOSIT_CUSTOMER")}><b>Deposit</b><small>Send virtual USD from Agent to Customer</small></button>
-                <button className="admin-module-card" type="button" onClick={() => setAgentCoinModule("WITHDRAW_CUSTOMER")}><b>Withdrawal</b><small>Return virtual USD from Customer to Agent</small></button>
-              </div>
-            ) : renderAgentCustomerCoinModule()}
-          </section>
-        ) : agentDashboardModule === "BET_HISTORY" ? (
-          <section className="admin-panel-card">
-            <div className="admin-panel-title-row">
-              <div><div className="admin-section-kicker">BETTING REPORT</div><div className="admin-panel-title">BET HISTORY</div></div>
-              <button className="admin-small-action" type="button" onClick={() => setAgentDashboardModule("HOME")}>BACK</button>
-            </div>
-            <div style={{ overflowX: "auto", width: "100%" }}>
-              {agentReportsLoading ? <div className="admin-empty">LOADING BET HISTORY...</div> : agentReportsRows.length === 0 ? <div className="admin-empty">No betting entries found.</div> : (
-                <table className="admin-report-table" style={{ minWidth: "1100px", width: "100%" }}>
-                  <thead><tr><th>TIME</th><th>USERNAME</th><th>GAME</th><th>SESSION</th><th>BAZI</th><th>MARKET</th><th>BET TYPE</th><th>NUMBER</th><th>STAKE</th><th>RATE</th><th>POTENTIAL WIN</th><th>RESULT</th><th>STATUS</th></tr></thead>
-                  <tbody>{agentReportsRows.map((row) => <tr key={row.id}><td>{row.bet_time ? new Date(row.bet_time).toLocaleString() : "-"}</td><td>{row.username}</td><td>{row.game_name}</td><td>{row.session_code}</td><td>{row.bazi_no ?? "-"}</td><td>{row.market}</td><td>{row.bet_type}</td><td>{row.played_number}</td><td>${row.stake.toFixed(2)}</td><td>{row.rate}X</td><td>${row.potential_win.toFixed(2)}</td><td>{row.result}</td><td>{row.status}</td></tr>)}</tbody>
-                </table>
-              )}
-            </div>
-            {agentReportsTotal > 0 ? <div className="admin-pagination"><button className="admin-small-action" disabled={agentReportsPage <= 0 || agentReportsLoading} onClick={() => void loadAgentBetHistory(agentReportsPage - 1)}>PREVIOUS</button><span>PAGE {agentReportsPage + 1} OF {Math.max(1, Math.ceil(agentReportsTotal / 25))} • SHOWING {agentReportsRows.length} OF {agentReportsTotal}</span><button className="admin-small-action" disabled={agentReportsLoading || (agentReportsPage + 1) * 25 >= agentReportsTotal} onClick={() => void loadAgentBetHistory(agentReportsPage + 1)}>NEXT</button></div> : null}
-          </section>
-        ) : agentDashboardModule === "EXPOSURE" ? (
-          <section className="admin-panel-card">
-            <div className="admin-panel-title-row">
-              <div><div className="admin-section-kicker">CUSTOMER RISK VIEW</div><div className="admin-panel-title">CUSTOMER EXPOSURE</div></div>
-              <button className="admin-small-action" type="button" onClick={() => setAgentDashboardModule("HOME")}>BACK</button>
-            </div>
-            <div className="admin-stat-grid">
-              <div className="admin-stat-card"><span>TOTAL CUSTOMER EXPOSURE</span><strong className="admin-exposure-value">${agentOverviewStats.customerExposure.toFixed(2)}</strong></div>
-              <div className="admin-stat-card"><span>TOTAL CUSTOMER AVAILABLE</span><strong className="admin-available-value">${agentOverviewStats.customerAvailable.toFixed(2)}</strong></div>
-            </div>
-            {agentExposureRows.length === 0 ? <div className="admin-empty">No customer accounts found.</div> : <div className="admin-agent-list">{agentExposureRows.map((row) => <div className="admin-agent-row" key={row.id}><div style={{ flex: 1 }}><b>{row.username}</b><small>{row.customer_code}</small></div><div className="admin-wallet-result-balances"><span>Available <strong className="admin-available-value">${row.available_balance.toFixed(2)}</strong></span><span>Exposure <strong className="admin-exposure-value">${row.exposure_balance.toFixed(2)}</strong></span><span>Status <strong>{row.status === "BLOCKED" ? "PAUSED" : row.status}</strong></span></div></div>)}</div>}
           </section>
         ) : (
           <section className="admin-panel-card">
@@ -14047,7 +14254,107 @@ color: #111;
 /* ADMIN PANEL */
 .admin-shell{min-height:100vh;background:radial-gradient(circle at 50% -10%,rgba(255,195,0,.10),transparent 34%),linear-gradient(180deg,#05070a 0%,#090c12 60%,#030405 100%);color:#fff}
 .admin-header{width:100%;padding:14px 12px;border-bottom:1px solid rgba(255,195,0,.24);background:linear-gradient(180deg,#0d1118,#080b10);display:flex;align-items:center;justify-content:space-between;gap:10px}
-.admin-brand{font-size:18px;font-weight:900;letter-spacing:1px;color:#ffc928}.admin-subtitle{margin-top:3px;font-size:7px;color:#9a9fa8;letter-spacing:.8px;font-weight:800}.admin-header-actions{display:flex;align-items:center;gap:6px}.admin-role-badge{padding:7px 8px;border-radius:7px;border:1px solid rgba(255,195,0,.45);color:#ffd33c;background:#11151c;font-size:7px;font-weight:900}.admin-logout-btn{height:31px;padding:0 9px;border-radius:7px;border:1px solid rgba(255,70,70,.8);background:#b51f2a;color:#fff;font-size:7px;font-weight:900}.admin-main{width:100%;max-width:720px;margin:0 auto;padding:12px}.admin-welcome-card,.admin-panel-card,.admin-supply-card{border:1px solid rgba(255,195,0,.18);background:linear-gradient(145deg,rgba(20,24,31,.96),rgba(8,11,16,.96));border-radius:13px;padding:14px;margin-bottom:10px}.admin-welcome-card{display:flex;justify-content:space-between;align-items:center;gap:10px}.admin-section-kicker{font-size:7px;color:#b99322;font-weight:900;letter-spacing:1.2px}.admin-welcome-card h1,.admin-supply-card h2{margin:5px 0 4px;font-size:18px;color:#fff}.admin-welcome-card p,.admin-supply-card p{margin:0;color:#8e949e;font-size:8px;line-height:1.55}.admin-refresh-btn{min-width:72px;height:32px;border-radius:7px;border:1px solid rgba(255,195,0,.55);background:#12161d;color:#ffd33c;font-size:7px;font-weight:900}.admin-success{margin-bottom:10px;padding:9px;border-radius:8px;border:1px solid rgba(50,220,120,.35);background:rgba(20,120,65,.16);color:#55ee9a;font-size:8px}.admin-available-value{color:#45ed8b !important}.admin-exposure-value{color:#ff6b6b !important}..admin-error{margin-bottom:10px;padding:9px;border-radius:8px;border:1px solid rgba(255,70,70,.35);background:rgba(130,20,25,.18);color:#ff8a8a;font-size:8px}.admin-stat-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:10px}.admin-account-management{border:1px solid rgba(255,195,0,.18);background:linear-gradient(145deg,rgba(20,24,31,.96),rgba(8,11,16,.96));border-radius:13px;padding:14px;margin-bottom:10px}.admin-account-header{margin-bottom:10px}.admin-account-header h2{margin:5px 0 4px;font-size:15px;color:#fff}.admin-account-header p{margin:0;color:#8e949e;font-size:8px;line-height:1.55}.admin-account-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.admin-account-card{min-height:72px;padding:10px;border-radius:9px;border:1px solid #1d232c;background:#0a0d12;display:flex;flex-direction:column;justify-content:space-between}.admin-account-card.primary{border-color:rgba(255,195,0,.34)}.admin-account-card.highlight{border-color:rgba(255,195,0,.28);background:linear-gradient(145deg,#11140e,#0a0d12)}.admin-account-card span{font-size:6px;color:#777;font-weight:900;letter-spacing:.7px}.admin-account-card strong{font-size:14px;color:#ffd13b;word-break:break-word;margin:4px 0}.admin-account-card small{font-size:6px;color:#666;line-height:1.35}.admin-account-detail-panel{padding:14px}.admin-account-detail-intro{margin:5px 0 12px;color:#8e949e;font-size:8px;line-height:1.55}.admin-account-grid-detail{grid-template-columns:repeat(2,minmax(0,1fr))}.admin-stat-card{min-height:78px;padding:11px;border-radius:11px;border:1px solid rgba(255,195,0,.14);background:#0d1117;display:flex;flex-direction:column;justify-content:space-between}.admin-stat-card span{font-size:6px;color:#777;font-weight:900;letter-spacing:.8px}.admin-stat-card strong{font-size:16px;color:#ffd13b;word-break:break-word}.admin-module-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:10px}.admin-module-card{min-height:68px;text-align:left;padding:10px;border-radius:10px;border:1px solid #242b35;background:#0d1117;color:#fff}.admin-module-card.active{border-color:rgba(255,195,0,.5)}.admin-module-card b{display:block;color:#ffd13b;font-size:9px;margin-bottom:4px}.admin-module-card small{display:block;color:#777;font-size:7px}.admin-form{display:flex;flex-direction:column;gap:10px}.admin-form-field{display:flex;flex-direction:column;gap:5px}.admin-form-field label{font-size:7px;color:#777;font-weight:900;letter-spacing:.8px}.admin-form-input{width:100%;height:40px;padding:0 11px;border-radius:8px;border:1px solid #252c36;background:#090c11;color:#fff;font-size:10px;outline:none}.admin-form-input:focus{border-color:rgba(255,195,0,.55)}.admin-form-input::placeholder{color:#555}.admin-form-note{padding:9px;border-radius:7px;background:#0a0d12;color:#777;font-size:7px;line-height:1.5}.admin-create-btn{width:100%;height:40px;border-radius:8px;border:1px solid rgba(255,195,0,.55);background:#15130b;color:#ffd13b;font-size:8px;font-weight:900;cursor:pointer}.admin-create-btn:disabled{opacity:.55;cursor:not-allowed}.admin-create-btn:active{transform:scale(.99)}.admin-panel-title{font-size:10px;color:#ffd13b;font-weight:900;margin-bottom:9px}.admin-panel-title-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px}.admin-empty{padding:13px;border-radius:8px;background:#0a0d12;color:#777;text-align:center;font-size:8px}.admin-agent-list{display:flex;flex-direction:column;gap:6px}.admin-agent-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px;border-radius:8px;background:#0a0d12;border:1px solid #1d232c}.admin-agent-row b{display:block;color:#fff;font-size:8px}.admin-agent-row small{display:block;color:#666;font-size:6px;margin-top:3px;word-break:break-all}.admin-status{padding:5px 6px;border-radius:6px;background:#301318;color:#ff8a8a;font-size:6px;font-weight:900}.admin-status.active{background:rgba(0,150,70,.12);color:#55ee9a}.bet-analyzer-selector-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;align-items:end;margin-top:10px}.bet-analyzer-analyze-btn{height:40px;background:#ffd21f;color:#090b10;border-color:#ffd21f;font-size:9px}.bet-analyzer-session-header{padding:12px;border:1px solid rgba(255,195,0,.55);border-left:4px solid #ffd13b;border-radius:10px;background:linear-gradient(145deg,rgba(20,24,31,.96),rgba(8,11,16,.96))}.bet-analyzer-session-header b{display:block;color:#ffd13b;font-size:14px}.bet-analyzer-session-header small{display:block;color:#c5cad1;font-size:9px;margin-top:5px;line-height:1.45}.bet-analyzer-section{padding:0;overflow:hidden}.bet-analyzer-accordion{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px;background:transparent;border:0;color:#fff;text-align:left;cursor:pointer}.bet-analyzer-accordion span{display:block;min-width:0}.bet-analyzer-accordion b{display:block;color:#ffd13b;font-size:12px}.bet-analyzer-accordion small{display:block;color:#8e949e;font-size:8px;line-height:1.45;margin-top:4px}.bet-analyzer-accordion strong{color:#ffd13b;font-size:18px;flex:0 0 auto}.bet-analyzer-accordion.open{border-bottom:1px solid rgba(255,195,0,.18)}.bet-analyzer-content{padding:12px}.bet-analyzer-rate-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 11px;margin-bottom:9px;border:1px solid rgba(255,195,0,.5);border-radius:8px;background:#0a0d12;color:#fff;font-size:9px}.bet-analyzer-rate-row strong{color:#ffd13b;font-size:18px}.bet-analyzer-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}.bet-analyzer-number-card{min-width:0;min-height:92px;padding:10px 7px;border-radius:9px;background:#0a0d12;border:1px solid #252c36;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}.bet-analyzer-number-card.has-bet{border-color:#22d96b;background:linear-gradient(145deg,rgba(0,100,45,.22),rgba(10,13,18,.96))}.bet-analyzer-number-card.no-bet{border-color:rgba(255,195,0,.42)}.bet-analyzer-number-card b{display:block;color:#fff;font-size:18px;line-height:1.1}.bet-analyzer-number-card strong{display:block;color:#45ed8b;font-size:12px;margin-top:7px;white-space:nowrap}.bet-analyzer-number-card.no-bet strong{color:#aeb4c8}.bet-analyzer-number-card small{display:block;color:#c9cdd6;font-size:7px;margin-top:6px;line-height:1.25}.bet-analyzer-total{margin-top:9px;padding:11px;border:1px solid rgba(255,195,0,.55);border-radius:9px;background:linear-gradient(145deg,rgba(35,30,8,.75),rgba(10,13,18,.96));text-align:center}.bet-analyzer-total span{display:block;color:#fff;font-size:8px;letter-spacing:.5px}.bet-analyzer-total strong{display:block;color:#ffd13b;font-size:22px;margin-top:4px}.bet-analyzer-subsection{margin-bottom:12px}.bet-analyzer-subtitle{color:#ffd13b;font-size:10px;font-weight:900;margin-bottom:7px;padding:7px 8px;border-left:3px solid #ffd13b;background:#0a0d12;border-radius:6px}@media(max-width:700px){.bet-analyzer-selector-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.bet-analyzer-analyze-btn{grid-column:span 2}.bet-analyzer-grid{grid-template-columns:repeat(5,minmax(0,1fr));gap:5px}.bet-analyzer-number-card{min-height:78px;padding:8px 3px}.bet-analyzer-number-card b{font-size:14px}.bet-analyzer-number-card strong{font-size:10px;margin-top:5px}.bet-analyzer-number-card small{font-size:6px;margin-top:4px}.bet-analyzer-total strong{font-size:19px}.bet-analyzer-session-header small{font-size:9px;line-height:1.5}}.admin-wallet-lookup-card{border-color:rgba(255,195,0,.22)}
+.admin-brand{font-size:18px;font-weight:900;letter-spacing:1px;color:#ffc928}.admin-subtitle{margin-top:3px;font-size:7px;color:#9a9fa8;letter-spacing:.8px;font-weight:800}.admin-header-actions{display:flex;align-items:center;gap:6px}.admin-role-badge{padding:7px 8px;border-radius:7px;border:1px solid rgba(255,195,0,.45);color:#ffd33c;background:#11151c;font-size:7px;font-weight:900}.admin-logout-btn{height:31px;padding:0 9px;border-radius:7px;border:1px solid rgba(255,70,70,.8);background:#b51f2a;color:#fff;font-size:7px;font-weight:900}.admin-main{width:100%;max-width:720px;margin:0 auto;padding:12px}.admin-welcome-card,.admin-panel-card,.admin-supply-card{border:1px solid rgba(255,195,0,.18);background:linear-gradient(145deg,rgba(20,24,31,.96),rgba(8,11,16,.96));border-radius:13px;padding:14px;margin-bottom:10px}.admin-welcome-card{display:flex;justify-content:space-between;align-items:center;gap:10px}.admin-section-kicker{font-size:7px;color:#b99322;font-weight:900;letter-spacing:1.2px}.admin-welcome-card h1,.admin-supply-card h2{margin:5px 0 4px;font-size:18px;color:#fff}.admin-welcome-card p,.admin-supply-card p{margin:0;color:#8e949e;font-size:8px;line-height:1.55}.admin-refresh-btn{min-width:72px;height:32px;border-radius:7px;border:1px solid rgba(255,195,0,.55);background:#12161d;color:#ffd33c;font-size:7px;font-weight:900}.admin-success{margin-bottom:10px;padding:9px;border-radius:8px;border:1px solid rgba(50,220,120,.35);background:rgba(20,120,65,.16);color:#55ee9a;font-size:8px}.admin-available-value{color:#45ed8b !important}.admin-exposure-value{color:#ff6b6b !important}..admin-error{margin-bottom:10px;padding:9px;border-radius:8px;border:1px solid rgba(255,70,70,.35);background:rgba(130,20,25,.18);color:#ff8a8a;font-size:8px}.admin-stat-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:10px}.admin-account-management{border:1px solid rgba(255,195,0,.18);background:linear-gradient(145deg,rgba(20,24,31,.96),rgba(8,11,16,.96));border-radius:13px;padding:14px;margin-bottom:10px}.admin-account-header{margin-bottom:10px}.admin-account-header h2{margin:5px 0 4px;font-size:15px;color:#fff}.admin-account-header p{margin:0;color:#8e949e;font-size:8px;line-height:1.55}.admin-account-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.admin-account-card{min-height:72px;padding:10px;border-radius:9px;border:1px solid #1d232c;background:#0a0d12;display:flex;flex-direction:column;justify-content:space-between}.admin-account-card.primary{border-color:rgba(255,195,0,.34)}.admin-account-card.highlight{border-color:rgba(255,195,0,.28);background:linear-gradient(145deg,#11140e,#0a0d12)}.admin-account-card span{font-size:6px;color:#777;font-weight:900;letter-spacing:.7px}.admin-account-card strong{font-size:14px;color:#ffd13b;word-break:break-word;margin:4px 0}.admin-account-card small{font-size:6px;color:#666;line-height:1.35}.admin-account-detail-panel{padding:14px}.admin-account-detail-intro{margin:5px 0 12px;color:#8e949e;font-size:8px;line-height:1.55}.admin-account-grid-detail{grid-template-columns:repeat(2,minmax(0,1fr))}.admin-stat-card{min-height:78px;padding:11px;border-radius:11px;border:1px solid rgba(255,195,0,.14);background:#0d1117;display:flex;flex-direction:column;justify-content:space-between}.admin-stat-card span{font-size:6px;color:#777;font-weight:900;letter-spacing:.8px}.admin-stat-card strong{font-size:16px;color:#ffd13b;word-break:break-word}.admin-module-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:10px}.admin-module-card{min-height:68px;text-align:left;padding:10px;border-radius:10px;border:1px solid #242b35;background:#0d1117;color:#fff}.admin-module-card.active{border-color:rgba(255,195,0,.5)}.admin-module-card b{display:block;color:#ffd13b;font-size:9px;margin-bottom:4px}.admin-module-card small{display:block;color:#777;font-size:7px}.admin-form{display:flex;flex-direction:column;gap:10px}.admin-form-field{display:flex;flex-direction:column;gap:5px}.admin-form-field label{font-size:7px;color:#777;font-weight:900;letter-spacing:.8px}.admin-form-input{width:100%;height:40px;padding:0 11px;border-radius:8px;border:1px solid #252c36;background:#090c11;color:#fff;font-size:10px;outline:none}.admin-form-input:focus{border-color:rgba(255,195,0,.55)}.admin-form-input::placeholder{color:#555}.admin-form-note{padding:9px;border-radius:7px;background:#0a0d12;color:#777;font-size:7px;line-height:1.5}.admin-create-btn{width:100%;height:40px;border-radius:8px;border:1px solid rgba(255,195,0,.55);background:#15130b;color:#ffd13b;font-size:8px;font-weight:900;cursor:pointer}.admin-create-btn:disabled{opacity:.55;cursor:not-allowed}.admin-create-btn:active{transform:scale(.99)}.admin-panel-title{font-size:10px;color:#ffd13b;font-weight:900;margin-bottom:9px}.admin-panel-title-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px}.admin-empty{padding:13px;border-radius:8px;background:#0a0d12;color:#777;text-align:center;font-size:8px}.admin-agent-list{display:flex;flex-direction:column;gap:6px}.admin-agent-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px;border-radius:8px;background:#0a0d12;border:1px solid #1d232c}.admin-agent-row b{display:block;color:#fff;font-size:8px}.admin-agent-row small{display:block;color:#666;font-size:6px;margin-top:3px;word-break:break-all}/* AGENT ADMIN LIGHT TABLES */
+.agent-today-betting-card{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  min-height:86px;
+  margin:0 0 12px;
+  padding:15px 16px;
+  border:1px solid rgba(255,198,40,.42);
+  border-radius:14px;
+  background:linear-gradient(145deg,#11161d,#070a0f);
+  box-shadow:0 8px 24px rgba(0,0,0,.20), inset 0 0 18px rgba(255,193,7,.02);
+}
+.agent-today-kicker{font-size:7px;letter-spacing:1.5px;color:#d7b83e;font-weight:900}
+.agent-today-label{margin-top:5px;font-size:8px;color:#aeb4bd;font-weight:700}
+.agent-today-betting-card>strong{font-size:22px;color:#ffd43d;white-space:nowrap}
+.agent-light-panel{background:#f7f8fa !important;color:#171a1f !important;border-color:#d7dbe1 !important}
+.agent-light-panel .admin-panel-title{color:#171a1f}
+.agent-light-panel .admin-section-kicker{color:#9b7200}
+.agent-light-panel .admin-panel-title-row{border-bottom-color:#e0e3e8}
+.agent-light-table-scroll{
+  width:100%;
+  overflow-x:auto;
+  -webkit-overflow-scrolling:touch;
+  border:1px solid #d9dde3;
+  border-radius:10px;
+  background:#fff;
+}
+.agent-light-table{
+  width:100%;
+  min-width:980px;
+  border-collapse:collapse;
+  table-layout:auto;
+  font-size:9px;
+}
+.agent-light-table th{
+  padding:10px 9px;
+  text-align:left;
+  white-space:nowrap;
+  background:#f0f2f5;
+  color:#1b1f24;
+  border-bottom:1px solid #cfd4da;
+  font-size:8px;
+  font-weight:900;
+}
+.agent-light-table td{
+  padding:10px 9px;
+  white-space:nowrap;
+  color:#252a30;
+  background:#fff;
+  border-bottom:1px solid #e3e6ea;
+  font-size:8px;
+  font-weight:700;
+}
+.agent-light-table tbody tr:hover td{background:#fafbfc}
+.agent-light-table tbody tr:last-child td{border-bottom:none}
+.agent-light-status{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:54px;
+  padding:4px 7px;
+  border-radius:999px;
+  border:1px solid #cfd4da;
+  background:#f1f3f5;
+  color:#42474d;
+  font-size:7px;
+  font-weight:900;
+}
+.agent-light-status.active,.agent-light-status.won{
+  border-color:#8fd4a8;
+  background:#ecfaf1;
+  color:#16733b;
+}
+.agent-light-status.paused,.agent-light-status.lost{
+  border-color:#f0aaaa;
+  background:#fff0f0;
+  color:#b3261e;
+}
+.agent-light-status.pending{
+  border-color:#e0c36a;
+  background:#fff8dc;
+  color:#806000;
+}
+.agent-table-action{
+  min-width:66px;
+  padding:6px 9px;
+  border:1px solid #c7cdd4;
+  border-radius:7px;
+  background:#fff;
+  color:#171a1f;
+  font-size:7px;
+  font-weight:900;
+  cursor:pointer;
+}
+.agent-table-action:hover{border-color:#a77a00;background:#fffaf0}
+.agent-table-action:disabled{opacity:.45;cursor:not-allowed}
+.agent-audit-credit{color:#13803c !important;font-weight:900}
+.agent-audit-debit{color:#c52b2b !important;font-weight:900}
+.admin-status{padding:5px 6px;border-radius:6px;background:#301318;color:#ff8a8a;font-size:6px;font-weight:900}.admin-status.active{background:rgba(0,150,70,.12);color:#55ee9a}.bet-analyzer-selector-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;align-items:end;margin-top:10px}.bet-analyzer-analyze-btn{height:40px;background:#ffd21f;color:#090b10;border-color:#ffd21f;font-size:9px}.bet-analyzer-session-header{padding:12px;border:1px solid rgba(255,195,0,.55);border-left:4px solid #ffd13b;border-radius:10px;background:linear-gradient(145deg,rgba(20,24,31,.96),rgba(8,11,16,.96))}.bet-analyzer-session-header b{display:block;color:#ffd13b;font-size:14px}.bet-analyzer-session-header small{display:block;color:#c5cad1;font-size:9px;margin-top:5px;line-height:1.45}.bet-analyzer-section{padding:0;overflow:hidden}.bet-analyzer-accordion{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px;background:transparent;border:0;color:#fff;text-align:left;cursor:pointer}.bet-analyzer-accordion span{display:block;min-width:0}.bet-analyzer-accordion b{display:block;color:#ffd13b;font-size:12px}.bet-analyzer-accordion small{display:block;color:#8e949e;font-size:8px;line-height:1.45;margin-top:4px}.bet-analyzer-accordion strong{color:#ffd13b;font-size:18px;flex:0 0 auto}.bet-analyzer-accordion.open{border-bottom:1px solid rgba(255,195,0,.18)}.bet-analyzer-content{padding:12px}.bet-analyzer-rate-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 11px;margin-bottom:9px;border:1px solid rgba(255,195,0,.5);border-radius:8px;background:#0a0d12;color:#fff;font-size:9px}.bet-analyzer-rate-row strong{color:#ffd13b;font-size:18px}.bet-analyzer-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}.bet-analyzer-number-card{min-width:0;min-height:92px;padding:10px 7px;border-radius:9px;background:#0a0d12;border:1px solid #252c36;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}.bet-analyzer-number-card.has-bet{border-color:#22d96b;background:linear-gradient(145deg,rgba(0,100,45,.22),rgba(10,13,18,.96))}.bet-analyzer-number-card.no-bet{border-color:rgba(255,195,0,.42)}.bet-analyzer-number-card b{display:block;color:#fff;font-size:18px;line-height:1.1}.bet-analyzer-number-card strong{display:block;color:#45ed8b;font-size:12px;margin-top:7px;white-space:nowrap}.bet-analyzer-number-card.no-bet strong{color:#aeb4c8}.bet-analyzer-number-card small{display:block;color:#c9cdd6;font-size:7px;margin-top:6px;line-height:1.25}.bet-analyzer-total{margin-top:9px;padding:11px;border:1px solid rgba(255,195,0,.55);border-radius:9px;background:linear-gradient(145deg,rgba(35,30,8,.75),rgba(10,13,18,.96));text-align:center}.bet-analyzer-total span{display:block;color:#fff;font-size:8px;letter-spacing:.5px}.bet-analyzer-total strong{display:block;color:#ffd13b;font-size:22px;margin-top:4px}.bet-analyzer-subsection{margin-bottom:12px}.bet-analyzer-subtitle{color:#ffd13b;font-size:10px;font-weight:900;margin-bottom:7px;padding:7px 8px;border-left:3px solid #ffd13b;background:#0a0d12;border-radius:6px}@media(max-width:700px){.bet-analyzer-selector-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.bet-analyzer-analyze-btn{grid-column:span 2}.bet-analyzer-grid{grid-template-columns:repeat(5,minmax(0,1fr));gap:5px}.bet-analyzer-number-card{min-height:78px;padding:8px 3px}.bet-analyzer-number-card b{font-size:14px}.bet-analyzer-number-card strong{font-size:10px;margin-top:5px}.bet-analyzer-number-card small{font-size:6px;margin-top:4px}.bet-analyzer-total strong{font-size:19px}.bet-analyzer-session-header small{font-size:9px;line-height:1.5}}.admin-wallet-lookup-card{border-color:rgba(255,195,0,.22)}
 .admin-wallet-lookup-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px;align-items:center}
 .admin-wallet-lookup-row .admin-small-action{height:40px;min-width:68px}
 .admin-wallet-lookup-results{display:flex;flex-direction:column;gap:6px;margin-top:8px}
