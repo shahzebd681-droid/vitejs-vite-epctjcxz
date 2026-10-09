@@ -2952,6 +2952,7 @@ const { data: authListener } = supabase.auth.onAuthStateChange((_event, session)
 // Avoid running the same account validation twice on SIGNED_IN.
 if (_event === "SIGNED_IN") return;
 const user = session?.user;
+if (user) { setAdminSuccess(""); setAgentCustomerSuccess(""); setAgentCustomerError(""); } 
 if (!user) {
 setIsLoggedIn(false);
 setCustomerEmail("");
@@ -3139,7 +3140,7 @@ const logoutCustomer = async () => {
 await supabase.auth.signOut();
 setIsLoggedIn(false);
 setUserRole(null);
-setAdminError("");
+setAdminError(""); setAdminSuccess(""); setAgentCustomerSuccess(""); setAgentCustomerError("");
 setForcePasswordReset(false);
 setPasswordResetCurrent("");
 setPasswordResetNew("");
@@ -9406,6 +9407,7 @@ const renderAgentAdminArea = () => {
             className="admin-refresh-btn"
             type="button"
             onClick={() => {
+              setAgentCustomerSuccess(""); setAgentCustomerError("");
               if (agentDashboardModule === "BET_HISTORY") {
                 void loadAgentBetHistory(agentReportsPage);
               } else if (agentDashboardModule === "CUSTOMERS") {
