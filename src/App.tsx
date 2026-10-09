@@ -8125,6 +8125,8 @@ const renderSuperAdminArea = () => (
 <button
 className="admin-refresh-btn"
 onClick={() => {
+  setAdminSuccess("");
+  setAdminError("");
   if (adminModule === "AGENT_WALLET" && agentWalletAction !== null) {
     setAgentWalletAction(null);
     setAdminError("");
