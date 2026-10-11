@@ -1642,6 +1642,7 @@ const [walletId, setWalletId] = useState<string | null>(null);
 
 
 const [betSubmitting, setBetSubmitting] = useState(false);
+const pendingBetRequestIds = useRef<Record<string, string>>({});
 
 
 const [walletBalance, setWalletBalance] = useState(0);
@@ -3394,6 +3395,41 @@ stake: amount,
 rate: betRates[betType],
 }));
 
+// Reuse the same request ID for retries of the exact same submission.
+// sessionStorage preserves pending IDs across a page refresh in this tab.
+const requestFingerprint = JSON.stringify({
+customer_id: customerId,
+session_id: session.id,
+performed_by: customerProfileId,
+items,
+});
+const requestStorageKey = `apna-matka-pending-bet-requests:${customerProfileId}`;
+let pendingRequests = pendingBetRequestIds.current;
+try {
+const storedRequests = sessionStorage.getItem(requestStorageKey);
+if (storedRequests) {
+const parsedRequests = JSON.parse(storedRequests);
+if (parsedRequests && typeof parsedRequests === "object" && !Array.isArray(parsedRequests)) {
+pendingRequests = parsedRequests as Record<string, string>;
+pendingBetRequestIds.current = pendingRequests;
+}
+}
+} catch {
+// In-memory fallback is used if sessionStorage is unavailable.
+}
+
+let requestId = pendingRequests[requestFingerprint];
+if (!requestId) {
+requestId = crypto.randomUUID();
+pendingRequests[requestFingerprint] = requestId;
+pendingBetRequestIds.current = pendingRequests;
+try {
+sessionStorage.setItem(requestStorageKey, JSON.stringify(pendingRequests));
+} catch {
+// The request ID remains available in memory for retries in this page.
+}
+}
+
 const {
 data: rpcData,
 error: rpcError,
@@ -3404,6 +3440,7 @@ p_customer_id: customerId,
 p_session_id: session.id,
 p_performed_by: customerProfileId,
 p_items: items,
+p_request_id: requestId,
 }
 );
 
@@ -3476,6 +3513,19 @@ alert(
 );
 
 setSelectedBets({});
+
+// Remove the request ID only after the server confirms success.
+delete pendingRequests[requestFingerprint];
+pendingBetRequestIds.current = pendingRequests;
+try {
+if (Object.keys(pendingRequests).length > 0) {
+sessionStorage.setItem(requestStorageKey, JSON.stringify(pendingRequests));
+} else {
+sessionStorage.removeItem(requestStorageKey);
+}
+} catch {
+// A storage cleanup failure must not turn a successful bet into a failed UI result.
+}
 } catch (error) {
 const message =
 error instanceof Error
