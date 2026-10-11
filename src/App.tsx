@@ -3538,72 +3538,6 @@ setBetSubmitting(false);
 }
 };
 
-const runIdempotencyRetryTest = async () => {
-  const TEST_PROFILE_ID = "6dc0bfb8-1843-4326-8ab6-26ba6146bf70";
-  const TEST_CUSTOMER_ID = "32e6c3c2-9b90-4b79-8e0f-d7c742942539";
-  const TEST_SESSION_ID = "41475d3a-37c6-4c20-a97a-324c25c8b5c8";
-  const TEST_REQUEST_ID = "77890769-9f49-4b95-bdfd-2f92620bd756";
-  const EXPECTED_BET_ID = "40318333-0322-4684-8578-4e5a52150bee";
-  const EXPECTED_TRANSACTION_ID = "a0718e28-54b8-45bf-8719-4a57eeaff243";
-
-  if (customerProfileId !== TEST_PROFILE_ID || customerId !== TEST_CUSTOMER_ID) {
-    alert("Idempotency retry test is only enabled for the designated test customer.");
-    return;
-  }
-
-  if (betSubmitting) {
-    alert("A bet submission is already in progress. Please wait.");
-    return;
-  }
-
-  const confirmed = window.confirm(
-    "Retry the already-completed $20 test request using its original request ID?\n\n" +
-    "This must return the existing bet and transaction, not create a new bet. Continue only for this test customer."
-  );
-  if (!confirmed) return;
-
-  setBetSubmitting(true);
-  try {
-    const { data, error } = await supabase.rpc("submit_customer_bet", {
-      p_customer_id: TEST_CUSTOMER_ID,
-      p_session_id: TEST_SESSION_ID,
-      p_performed_by: TEST_PROFILE_ID,
-      p_items: [
-        { bet_type: "Single", played_number: "2", stake: 20, rate: 9 },
-      ],
-      p_request_id: TEST_REQUEST_ID,
-    });
-
-    if (error) throw error;
-    const result = Array.isArray(data) ? data[0] : data;
-    if (!result) throw new Error("RPC returned no result.");
-
-    const sameBet = result.bet_id === EXPECTED_BET_ID;
-    const sameTransaction = result.wallet_transaction_id === EXPECTED_TRANSACTION_ID;
-    if (!sameBet || !sameTransaction) {
-      alert(
-        "RETRY TEST FAILED: returned identifiers did not match the original request.\n\n" +
-        `Returned bet ID: ${result.bet_id || "missing"}\n` +
-        `Returned transaction ID: ${result.wallet_transaction_id || "missing"}\n\n` +
-        "Stop testing and inspect the database before any further bets."
-      );
-      return;
-    }
-
-    alert(
-      "RETRY TEST RESPONSE PASSED: the RPC returned the original bet and wallet transaction IDs.\n\n" +
-      `Bet ID: ${result.bet_id}\n` +
-      `Wallet transaction ID: ${result.wallet_transaction_id}\n\n` +
-      "Now verify the request still has exactly one matching wallet transaction in Supabase."
-    );
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown RPC error.";
-    alert(`RETRY TEST ERROR. Do not submit another bet.\n\n${message}`);
-  } finally {
-    setBetSubmitting(false);
-  }
-};
-
 /* =========================================================
 
 BETTING ENTRY DATA
@@ -5686,19 +5620,6 @@ placeVirtualBet
 
 
 </button>
-
-{customerProfileId === "6dc0bfb8-1843-4326-8ab6-26ba6146bf70" &&
- customerId === "32e6c3c2-9b90-4b79-8e0f-d7c742942539" &&
- new URLSearchParams(window.location.search).get("idempotencyRetryTest") === "1" && (
-  <button
-    type="button"
-    className="place-bet-btn"
-    disabled={betSubmitting}
-    onClick={runIdempotencyRetryTest}
-  >
-    RETRY IDEMPOTENCY TEST REQUEST
-  </button>
-)}
 
 
 </div>
