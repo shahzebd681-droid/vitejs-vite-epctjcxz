@@ -6298,7 +6298,6 @@ onClick={logoutCustomer}
 </div>
 
 {renderCustomerBottomNav()}
-
 </main>
 
 
@@ -16827,7 +16826,7 @@ color: #111;
 .amount-btn.selected{
   border:3px solid #f1cf61;
   background:linear-gradient(180deg,#fffdf2,#dce7f1);
-  box-shadow:inset 0 1px 2px rgba(255,255,255,.98),0 0 0 2px rgba(255,193,7,.24),0 3px 7px rgba(0,0,0,.32);
+  box-shadow:inset 0 1px 2px rgba(255,255,255,.98),0 0 0 2px rgba(255,193,7,.18),0 3px 7px rgba(0,0,0,.32);
 }
 .amount-grid{gap:8px;}
 
@@ -16972,8 +16971,7 @@ color: #111;
 .customer-history-page .history-table th:nth-child(10),
 .customer-history-page .history-table td:nth-child(10){width:9%;}
 .customer-history-page,
-.customer-result-page,
-.customer-profile-page{
+.customer-result-page{
   padding-bottom:112px !important;
 }
 @media (max-width:390px){
