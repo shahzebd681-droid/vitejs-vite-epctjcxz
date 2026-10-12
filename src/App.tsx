@@ -4009,6 +4009,10 @@ onClick={() => openCustomerPage("result")}
 
 
 
+// Keep the legacy navigation helper without rendering duplicate top navigation.
+void renderCustomerNav;
+
+
 /* =========================================================
 
 
