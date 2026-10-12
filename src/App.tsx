@@ -101,24 +101,35 @@ const mainBazarMarkets = [
 
 const amountOptions = [5, 10, 20, 50, 100, 200, 500, 1000];
 
-const betRates: Record<string, number> = {
+const betRatesByGame: Record<GameName, Record<BetType, number>> = {
+  "Main Bazar": {
+    Single: 9,
+    "Single Patti": 125,
+    "Double Patti": 200,
+    "Triple Patti": 300,
+    Jodi: 85,
+  },
+  "Dus ka Dum": {
+    Single: 9,
+    "Single Patti": 150,
+    "Double Patti": 300,
+    "Triple Patti": 500,
+    Jodi: 85,
+  },
+  "Kolkata Fatafat": {
+    Single: 9,
+    "Single Patti": 115,
+    "Double Patti": 150,
+    "Triple Patti": 300,
+    Jodi: 85,
+  },
+};
 
-
-Single: 9,
-
-
-"Single Patti": 125,
-
-
-"Double Patti": 200,
-
-
-"Triple Patti": 300,
-
-
-Jodi: 85,
-
-
+const getBetRate = (game: string, type: BetType): number => {
+  if (game === "Main Bazar" || game === "Dus ka Dum" || game === "Kolkata Fatafat") {
+    return betRatesByGame[game][type];
+  }
+  return betRatesByGame["Main Bazar"][type];
 };
 
 
@@ -3392,7 +3403,7 @@ const items = entries.map(([number, amount]) => ({
 bet_type: betType,
 played_number: number,
 stake: amount,
-rate: betRates[betType],
+rate: getBetRate(selectedGame, betType),
 }));
 
 // Reuse the same request ID for retries of the exact same submission.
@@ -3490,7 +3501,7 @@ selectedBazi !== null
 type: betType,
 number,
 amount,
-rate: Number(betRates[betType] || 0),
+rate: getBetRate(selectedGame, betType),
 status: "PENDING",
 result: "-",
 wonAmount: 0,
@@ -4847,10 +4858,7 @@ BETTING PAGE
 const renderBettingPage = () => {
 
 
-const rate =
-
-
-betRates[betType];
+const rate = getBetRate(selectedGame, betType);
 
 
 
