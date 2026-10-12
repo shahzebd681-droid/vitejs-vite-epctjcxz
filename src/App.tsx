@@ -1808,7 +1808,7 @@ type CustomerResultRow = {
 const [customerResultRows, setCustomerResultRows] = useState<CustomerResultRow[]>([]);
 const [customerResultsLoading, setCustomerResultsLoading] = useState(false);
 const [customerResultsError, setCustomerResultsError] = useState("");
-const [customerResultGame, setCustomerResultGame] = useState<GameName | null>(null);
+const [customerResultGame, setCustomerResultGame] = useState<GameName | null>("Main Bazar");
 
 type AppNavigationHistoryState = {
   apnaMatkaNavigation: true;
@@ -3021,6 +3021,7 @@ CUSTOMER NAVIGATION
 const openCustomerPage = (page: Page) => {
   setCustomerPage(page);
   if (page !== "home") setCustomerSelectedGame(null);
+  if (page === "result") setCustomerResultGame("Main Bazar");
 };
 
 const selectCustomerGame = (game: GameName) => {
@@ -6103,7 +6104,6 @@ const renderProfilePage = () => (
 
 
  {renderBalanceBar()}
- {renderCustomerNav()}
 
 
 
@@ -6296,6 +6296,8 @@ onClick={logoutCustomer}
 
 
 </div>
+
+{renderCustomerBottomNav()}
 
 </main>
 
@@ -16823,9 +16825,9 @@ color: #111;
   box-shadow:inset 0 1px 2px rgba(255,255,255,.95),0 2px 5px rgba(0,0,0,.32);
 }
 .amount-btn.selected{
-  border-color:#f1cf61;
+  border:3px solid #f1cf61;
   background:linear-gradient(180deg,#fffdf2,#dce7f1);
-  box-shadow:inset 0 1px 2px rgba(255,255,255,.98),0 0 0 2px rgba(255,193,7,.18),0 3px 7px rgba(0,0,0,.32);
+  box-shadow:inset 0 1px 2px rgba(255,255,255,.98),0 0 0 2px rgba(255,193,7,.24),0 3px 7px rgba(0,0,0,.32);
 }
 .amount-grid{gap:8px;}
 
@@ -16970,7 +16972,8 @@ color: #111;
 .customer-history-page .history-table th:nth-child(10),
 .customer-history-page .history-table td:nth-child(10){width:9%;}
 .customer-history-page,
-.customer-result-page{
+.customer-result-page,
+.customer-profile-page{
   padding-bottom:112px !important;
 }
 @media (max-width:390px){
