@@ -4481,6 +4481,14 @@ const renderCustomerSelectedGame = () => {
   );
 };
 
+const renderCustomerBottomNav = () => (
+  <div className="customer-bottom-nav customer-primary-bottom-nav">
+    <button type="button" className={customerPage === "home" ? "selected-bottom" : ""} aria-current={customerPage === "home" ? "page" : undefined} onClick={() => openCustomerPage("home")}>Home</button>
+    <button type="button" className={customerPage === "history" ? "selected-bottom" : ""} aria-current={customerPage === "history" ? "page" : undefined} onClick={() => openCustomerPage("history")}>Bet History</button>
+    <button type="button" className={customerPage === "result" ? "selected-bottom" : ""} aria-current={customerPage === "result" ? "page" : undefined} onClick={() => openCustomerPage("result")}>Result</button>
+  </div>
+);
+
 const renderCustomerHome = () => (
   <>
     {renderCustomerHeader()}
@@ -4492,7 +4500,6 @@ const renderCustomerHome = () => (
         </div>
         <div className="customer-live">LIVE</div>
       </div>
-      {renderCustomerNav()}
       <div className="customer-section-title">TODAY'S GAMES</div>
       {renderCustomerGameCards()}
       <div className="customer-notice">
@@ -4500,11 +4507,7 @@ const renderCustomerHome = () => (
         Virtual USD coin game only.<br />
         No customer Deposit or Withdrawal option is available in this customer interface.
       </div>
-      <div className="customer-bottom-nav">
-        <button onClick={() => openCustomerPage("home")}>Home</button>
-        <button onClick={() => openCustomerPage("history")}>Bet History</button>
-        <button onClick={() => openCustomerPage("result")}>Result</button>
-      </div>
+      {renderCustomerBottomNav()}
     </main>
     {renderCustomerFooter()}
   </>
@@ -5792,7 +5795,6 @@ return (
 <>
 {renderCustomerHeader()}
 <main className="customer-main customer-history-page">
-{renderCustomerNav()}
 
 <div className="page-heading">
 <div className="page-heading-title">Bet History</div>
@@ -5891,6 +5893,7 @@ NEXT
 </div>
 </>
 )}
+{renderCustomerBottomNav()}
 </main>
 </>
 );
@@ -6041,7 +6044,6 @@ const renderResultPage = () => (
   <>
     {renderCustomerHeader()}
     <main className="customer-main customer-result-page">
-      {renderCustomerNav()}
       <div className="page-heading">
         <div className="page-heading-title">Result History</div>
         <div className="page-heading-sub">Latest declared game results</div>
@@ -6073,6 +6075,7 @@ const renderResultPage = () => (
       ) : (
         <div className="customer-result-empty">Select a game to view its result history.</div>
       )}
+    {renderCustomerBottomNav()}
     </main>
   </>
 );
@@ -12817,62 +12820,28 @@ font-size: 7px;
 
 
 .history-tabs {
-
-
-display: grid;
-
-
-grid-template-columns:
-
-
-    repeat(4,minmax(0,1fr));
-
-
-gap: 5px;
-
-
-margin-bottom: 10px;
-
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+  margin: 0 0 12px;
 }
-
-
-
 
 .history-tab {
-
-
-min-height: 38px;
-
-
-padding: 0 4px;
-
-
-border-radius: 7px;
-
-
-border: 1px solid #252e38;
-
-
-background: #0c1118;
-
-
-color: #858b93;
-
-
-font-size: 7px;
-
-
-font-weight: 900;
-
-
-cursor: pointer;
-
-
-white-space: nowrap;
-
-
+  min-width: 0;
+  min-height: 48px;
+  padding: 7px 3px;
+  border-radius: 10px;
+  border: 1px solid #303b49;
+  background: linear-gradient(145deg, #101720, #090e14);
+  color: #c0c7d1;
+  font-size: clamp(9px, 2.65vw, 12px);
+  font-weight: 800;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: normal;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.025);
+  transition: border-color .15s ease, background .15s ease, color .15s ease;
 }
-
 
 .history-tab.active {
 
@@ -16294,6 +16263,41 @@ color: #111;
   margin:0 !important;
   z-index:1001 !important;
 }
+.customer-primary-bottom-nav{
+  bottom:0 !important;
+  width:min(100%, 520px) !important;
+  padding:8px 10px calc(8px + env(safe-area-inset-bottom, 0px)) !important;
+  box-sizing:border-box !important;
+  border:1px solid rgba(255,205,64,.42) !important;
+  border-bottom:0 !important;
+  border-radius:16px 16px 0 0 !important;
+  background:#05080d !important;
+  box-shadow:0 -8px 24px rgba(0,0,0,.72), inset 0 1px 0 rgba(255,225,130,.08) !important;
+  z-index:1001 !important;
+}
+.customer-primary-bottom-nav button{
+  height:62px !important;
+  border-radius:11px !important;
+  border:1px solid #293544 !important;
+  background:linear-gradient(155deg,#121b27,#080d13) !important;
+  color:#e0e5ed !important;
+  font-size:11px !important;
+  font-weight:850 !important;
+  letter-spacing:.1px;
+  gap:5px !important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.035);
+}
+.customer-primary-bottom-nav button::before{
+  font-size:21px !important;
+  color:#d9c06b !important;
+}
+.customer-primary-bottom-nav .selected-bottom{
+  color:#17120a !important;
+  border-color:#ffe16a !important;
+  background:linear-gradient(145deg,#fff083 0%,#ffd23c 48%,#ffb914 100%) !important;
+  box-shadow:0 0 18px rgba(255,194,35,.24),inset 0 1px 0 rgba(255,255,255,.7) !important;
+}
+.customer-primary-bottom-nav .selected-bottom::before{color:#17120a !important;}
 .customer-footer{
   display:none !important;
 }
@@ -16965,7 +16969,16 @@ color: #111;
 .customer-history-page .history-table td:nth-child(9){width:9%;}
 .customer-history-page .history-table th:nth-child(10),
 .customer-history-page .history-table td:nth-child(10){width:9%;}
+.customer-history-page,
+.customer-result-page{
+  padding-bottom:112px !important;
+}
+@media (max-width:390px){
+  .customer-primary-bottom-nav button{height:58px !important;font-size:10px !important;}
+}
+
 `}
+
 </style>
 
 
