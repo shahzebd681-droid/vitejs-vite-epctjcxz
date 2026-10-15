@@ -1001,6 +1001,7 @@ const [correctionSessions, setCorrectionSessions] = useState<Array<{
 const [correctionSelectedSessionId, setCorrectionSelectedSessionId] = useState("");
 const [correctionSessionsLoading, setCorrectionSessionsLoading] = useState(false);
 const [correctionPreviewLoading, setCorrectionPreviewLoading] = useState(false);
+const [correctionSubmitLoading, setCorrectionSubmitLoading] = useState(false);
 const [correctionPreview, setCorrectionPreview] = useState<any | null>(null);
 const [correctionNewSingleDigit, setCorrectionNewSingleDigit] = useState("");
 const [correctionNewPatti, setCorrectionNewPatti] = useState("");
@@ -7647,6 +7648,92 @@ const runCorrectionPreview = async () => {
   }
 };
 
+const submitResultCorrection = async () => {
+  const preview = correctionPreview;
+  if (!correctionSelectedSessionId || !preview) {
+    setAdminError("Load the correction preview before submitting.");
+    return;
+  }
+  if (String(preview.session_status || "") !== "CLOSED") {
+    setAdminError("Only CLOSED sessions can use this correction workflow.");
+    return;
+  }
+  if (
+    Number(preview.completed_settlements || 0) > 0 ||
+    Number(preview.reversed_settlements || 0) > 0 ||
+    Number(preview.active_bet_items || 0) > 0 ||
+    Number(preview.affected_bet_items || 0) > 0
+  ) {
+    setAdminError("Correction is blocked because this session has settlement or bet activity.");
+    return;
+  }
+  if (!/^[0-9]$/.test(correctionNewSingleDigit)) {
+    setAdminError("Enter a single digit from 0 to 9.");
+    return;
+  }
+  if (!/^[0-9]{3}$/.test(correctionNewPatti)) {
+    setAdminError("Enter a three-digit Patti from 000 to 999.");
+    return;
+  }
+  if (
+    correctionNewSingleDigit === String(preview.current_single_digit ?? "") &&
+    correctionNewPatti === String(preview.current_patti ?? "")
+  ) {
+    setAdminError("The proposed result is identical to the current result.");
+    return;
+  }
+  const reason = correctionReason.trim();
+  if (!reason) {
+    setAdminError("Enter a correction reason.");
+    return;
+  }
+
+  setCorrectionSubmitLoading(true);
+  setAdminError("");
+  setAdminSuccess("");
+  try {
+    const { data, error } = await supabase.rpc("submit_unsettled_result_correction", {
+      p_session_id: correctionSelectedSessionId,
+      p_single_digit: correctionNewSingleDigit,
+      p_patti: correctionNewPatti,
+      p_reason: reason,
+    });
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) throw new Error("Correction submission returned no confirmation.");
+    setAdminSuccess(
+      `Correction recorded successfully. New result ${correctionNewSingleDigit}/${correctionNewPatti}, version ${row.new_version_no ?? "?"}, correction ${row.correction_code ?? ""}.`
+    );
+    setCorrectionNewSingleDigit("");
+    setCorrectionNewPatti("");
+    setCorrectionReason("");
+
+    const { data: previewData, error: previewError } = await supabase.rpc("preview_result_correction", {
+      p_session_id: correctionSelectedSessionId,
+    });
+    if (previewError) throw previewError;
+    const refreshedPreview = Array.isArray(previewData) ? previewData[0] : previewData;
+    if (refreshedPreview) setCorrectionPreview(refreshedPreview);
+    setCorrectionSessions((current) => current.map((session) =>
+      session.id === correctionSelectedSessionId
+        ? {
+            ...session,
+            result_id: String(row.new_result_id || session.result_id),
+            version_no: Number(row.new_version_no || session.version_no + 1),
+            single_digit: correctionNewSingleDigit,
+            patti: correctionNewPatti,
+          }
+        : session
+    ));
+  } catch (error: any) {
+    console.error("=== RESULT CORRECTION SUBMISSION ERROR ===", error);
+    setAdminError(error?.message || String(error));
+    setAdminSuccess("");
+  } finally {
+    setCorrectionSubmitLoading(false);
+  }
+};
+
 const settleSelectedSession = async (session: { id: string; game_name: string; bazi_no: number | null; market: string }) => {
   if (!window.confirm(`Settle ${session.game_name}${session.bazi_no != null ? ` Bazi ${session.bazi_no}` : ` ${session.market}`} now?\n\nOnly the declared result for this session will be settled.`)) return;
   setSettlementLoading(true); setAdminError(""); setAdminSuccess("");
@@ -9016,15 +9103,31 @@ Target supply: <b>1,000,000 virtual USD coins</b>. Use the Agent Wallet and Onli
           />
         </div>
         <div className="admin-form-note">
-          This form is included for layout review only. Submission is deliberately disabled until the database RPC enforces session-status, active-bet, concurrency and audit requirements. No result, wallet, settlement or supply data can be changed from this form.
+          Submission is available only for CLOSED sessions with no settlement or bet activity. The database RPC rechecks eligibility and records the correction audit. Wallet, settlement and supply data are not changed by this workflow.
         </div>
         <button
           type="button"
           className="admin-create-btn"
-          disabled={true}
-          title="Backend correction safety checks must be completed before submission is enabled."
+          onClick={() => void submitResultCorrection()}
+          disabled={
+            correctionSubmitLoading ||
+            correctionSessionsLoading ||
+            correctionPreviewLoading ||
+            !correctionPreview ||
+            String(correctionPreview.session_status || "") !== "CLOSED" ||
+            Number(correctionPreview.completed_settlements || 0) > 0 ||
+            Number(correctionPreview.reversed_settlements || 0) > 0 ||
+            Number(correctionPreview.active_bet_items || 0) > 0 ||
+            Number(correctionPreview.affected_bet_items || 0) > 0 ||
+            !/^[0-9]$/.test(correctionNewSingleDigit) ||
+            !/^[0-9]{3}$/.test(correctionNewPatti) ||
+            (correctionNewSingleDigit === String(correctionPreview.current_single_digit ?? "") &&
+              correctionNewPatti === String(correctionPreview.current_patti ?? "")) ||
+            !correctionReason.trim()
+          }
+          title="Only CLOSED sessions with no settlement or bet activity can be corrected."
         >
-          SUBMIT CORRECTION — DISABLED
+          {correctionSubmitLoading ? "SUBMITTING CORRECTION..." : "SUBMIT CORRECTION"}
         </button>
       </div>
       <div className="admin-error" style={{ marginTop: 12 }}>
