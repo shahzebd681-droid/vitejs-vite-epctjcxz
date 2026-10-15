@@ -1002,6 +1002,9 @@ const [correctionSelectedSessionId, setCorrectionSelectedSessionId] = useState("
 const [correctionSessionsLoading, setCorrectionSessionsLoading] = useState(false);
 const [correctionPreviewLoading, setCorrectionPreviewLoading] = useState(false);
 const [correctionPreview, setCorrectionPreview] = useState<any | null>(null);
+const [correctionNewSingleDigit, setCorrectionNewSingleDigit] = useState("");
+const [correctionNewPatti, setCorrectionNewPatti] = useState("");
+const [correctionReason, setCorrectionReason] = useState("");
 
 // Bet Analyzer
 const [betAnalyzerView, setBetAnalyzerView] = useState<"HOME" | "ANALYZER">("HOME");
@@ -8972,8 +8975,60 @@ Target supply: <b>1,000,000 virtual USD coins</b>. Use the Agent Wallet and Onli
       <div className="admin-form-note" style={{ marginTop: 14 }}>
         Preview status: <b>{String(correctionPreview.correction_preview_status || "UNKNOWN")}</b>. Amounts are derived from settlement rows that are currently marked COMPLETED and SETTLED; this preview is not a ledger reconciliation and does not authorize correction.
       </div>
+      <div className="admin-form" style={{ marginTop: 16 }}>
+        <div className="admin-panel-title">CORRECTION REQUEST — PREPARATION ONLY</div>
+        <div className="admin-form-field">
+          <label>PROPOSED SINGLE DIGIT (0–9)</label>
+          <input
+            className="admin-form-input"
+            type="text"
+            inputMode="numeric"
+            maxLength={1}
+            value={correctionNewSingleDigit}
+            onChange={(event) => setCorrectionNewSingleDigit(event.target.value.replace(/[^0-9]/g, "").slice(0, 1))}
+            placeholder="Enter one digit"
+            disabled={correctionPreviewLoading}
+          />
+        </div>
+        <div className="admin-form-field">
+          <label>PROPOSED PATTI (000–999)</label>
+          <input
+            className="admin-form-input"
+            type="text"
+            inputMode="numeric"
+            maxLength={3}
+            value={correctionNewPatti}
+            onChange={(event) => setCorrectionNewPatti(event.target.value.replace(/[^0-9]/g, "").slice(0, 3))}
+            placeholder="Enter three digits"
+            disabled={correctionPreviewLoading}
+          />
+        </div>
+        <div className="admin-form-field">
+          <label>CORRECTION REASON</label>
+          <textarea
+            className="admin-form-input"
+            value={correctionReason}
+            onChange={(event) => setCorrectionReason(event.target.value.slice(0, 1000))}
+            maxLength={1000}
+            rows={3}
+            placeholder="Explain why the result needs correction"
+            disabled={correctionPreviewLoading}
+          />
+        </div>
+        <div className="admin-form-note">
+          This form is included for layout review only. Submission is deliberately disabled until the database RPC enforces session-status, active-bet, concurrency and audit requirements. No result, wallet, settlement or supply data can be changed from this form.
+        </div>
+        <button
+          type="button"
+          className="admin-create-btn"
+          disabled={true}
+          title="Backend correction safety checks must be completed before submission is enabled."
+        >
+          SUBMIT CORRECTION — DISABLED
+        </button>
+      </div>
       <div className="admin-error" style={{ marginTop: 12 }}>
-        Financial correction is intentionally not enabled here yet. Do not reverse or re-settle this session until a dedicated atomic correction RPC accounts for original wallet transactions, prior reversals, Jodi dependencies and supply/refill effects.
+        Settled financial correction is not enabled. Do not reverse or re-settle a session until a dedicated atomic correction RPC accounts for original wallet transactions, prior reversals, Jodi dependencies and supply/refill effects.
       </div>
     </section>
   ) : null}
