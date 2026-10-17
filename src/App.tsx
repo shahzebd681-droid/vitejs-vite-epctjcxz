@@ -998,6 +998,7 @@ const [correctionSessions, setCorrectionSessions] = useState<Array<{
   session_status: string; game_name: string; result_id: string; version_no: number;
   single_digit: string; patti: string;
 }>>([]);
+const [correctionWorkflow, setCorrectionWorkflow] = useState<"HOME" | "UNSETTLED" | "SETTLED">("HOME");
 const [correctionSelectedSessionId, setCorrectionSelectedSessionId] = useState("");
 const [correctionSessionsLoading, setCorrectionSessionsLoading] = useState(false);
 const [correctionPreviewLoading, setCorrectionPreviewLoading] = useState(false);
@@ -7553,7 +7554,7 @@ const loadSettlementModule = async () => {
   } finally { setSettlementLoading(false); }
 };
 
-const loadCorrectionSessions = async () => {
+const loadCorrectionSessions = async (workflow: "UNSETTLED" | "SETTLED" = correctionWorkflow === "SETTLED" ? "SETTLED" : "UNSETTLED") => {
   setCorrectionSessionsLoading(true);
   setAdminError("");
   setAdminSuccess("");
@@ -7575,7 +7576,7 @@ const loadCorrectionSessions = async () => {
 
     const sessionIds = sessionRows.map((row: any) => String(row.id));
     const gameIds = [...new Set(sessionRows.map((row: any) => String(row.game_id)).filter(Boolean))];
-    const [gamesResult, resultsResult] = await Promise.all([
+    const [gamesResult, resultsResult, settlementsResult] = await Promise.all([
       gameIds.length
         ? supabase.from("games").select("id, game_name").in("id", gameIds)
         : Promise.resolve({ data: [], error: null } as any),
@@ -7584,15 +7585,29 @@ const loadCorrectionSessions = async () => {
         .in("session_id", sessionIds)
         .eq("is_current", true)
         .eq("status", "DECLARED"),
+      supabase.from("settlements")
+        .select("session_id, status")
+        .in("session_id", sessionIds),
     ]);
     if (gamesResult.error) throw gamesResult.error;
     if (resultsResult.error) throw resultsResult.error;
+    if (settlementsResult.error) throw settlementsResult.error;
 
     const gameMap = new Map((gamesResult.data || []).map((row: any) => [String(row.id), String(row.game_name || "Game")]));
     const resultMap = new Map((resultsResult.data || []).map((row: any) => [String(row.session_id), row]));
+    const settlementMap = new Map<string, string[]>();
+    for (const settlement of settlementsResult.data || []) {
+      const key = String(settlement.session_id);
+      settlementMap.set(key, [...(settlementMap.get(key) || []), String(settlement.status || "")]);
+    }
     const rows = sessionRows.map((row: any) => {
       const result = resultMap.get(String(row.id));
       if (!result) return null;
+      const statuses = settlementMap.get(String(row.id)) || [];
+      const hasSettlement = statuses.length > 0;
+      const hasCompletedSettlement = statuses.some((status) => status === "COMPLETED" || status === "REVERSED");
+      if (workflow === "UNSETTLED" && hasSettlement) return null;
+      if (workflow === "SETTLED" && !hasCompletedSettlement) return null;
       return {
         id: String(row.id),
         session_date: String(row.session_date || ""),
@@ -7654,17 +7669,19 @@ const submitResultCorrection = async () => {
     setAdminError("Load the correction preview before submitting.");
     return;
   }
-  if (String(preview.session_status || "") !== "CLOSED") {
-    setAdminError("Only CLOSED sessions can use this correction workflow.");
+  if (correctionWorkflow !== "UNSETTLED") {
+    setAdminError("Only Unsettled Session Correction can submit this correction request.");
+    return;
+  }
+  if (!["CLOSED", "RESULT_DECLARED"].includes(String(preview.session_status || ""))) {
+    setAdminError("Only CLOSED or RESULT_DECLARED sessions can use Unsettled Session Correction.");
     return;
   }
   if (
     Number(preview.completed_settlements || 0) > 0 ||
-    Number(preview.reversed_settlements || 0) > 0 ||
-    Number(preview.active_bet_items || 0) > 0 ||
-    Number(preview.affected_bet_items || 0) > 0
+    Number(preview.reversed_settlements || 0) > 0
   ) {
-    setAdminError("Correction is blocked because this session has settlement or bet activity.");
+    setAdminError("Correction is blocked because this session has settlement activity.");
     return;
   }
   if (!/^[0-9]$/.test(correctionNewSingleDigit)) {
@@ -8358,7 +8375,7 @@ const renderSuperAdminArea = () => (
 <section className="admin-welcome-card">
 <div>
 <div className="admin-section-kicker">CONTROL CENTER</div>
-<h1>{adminModule === "AGENT_ADMIN" ? "Agent Admin" : adminModule === "ACCOUNT_OVERVIEW" ? "Account Overview" : adminModule === "ACCOUNT_DIRECTORY" ? "Customer & Admin All Accounts" : adminModule === "AGENT_WALLET" && agentWalletAction === "DEPOSIT" ? "Deposit Virtual USD" : adminModule === "AGENT_WALLET" && agentWalletAction === "WITHDRAW" ? "Withdraw Virtual USD" : adminModule === "AGENT_WALLET" ? "Agent Wallet" : adminModule === "DEPOSIT_AGENT" ? "Deposit Virtual USD" : adminModule === "WITHDRAW_AGENT" ? "Withdraw Virtual USD" : adminModule === "ONLINE_CUSTOMER" ? "Online Customer Wallet" : adminModule === "RESULTS" ? "Results" : adminModule === "SETTLEMENT" ? "Settlement" : adminModule === "BET_ANALYZER" ? "Bet Analyzer" : adminModule === "CONTACT" ? "Contact" : adminModule === "PASSWORD_RESET" ? "Password Reset" : adminModule === "CORRECTION_CENTER" ? "Result & Settlement Correction" : "Super Admin Dashboard"}</h1>
+<h1>{adminModule === "AGENT_ADMIN" ? "Agent Admin" : adminModule === "ACCOUNT_OVERVIEW" ? "Account Overview" : adminModule === "ACCOUNT_DIRECTORY" ? "Customer & Admin All Accounts" : adminModule === "AGENT_WALLET" && agentWalletAction === "DEPOSIT" ? "Deposit Virtual USD" : adminModule === "AGENT_WALLET" && agentWalletAction === "WITHDRAW" ? "Withdraw Virtual USD" : adminModule === "AGENT_WALLET" ? "Agent Wallet" : adminModule === "DEPOSIT_AGENT" ? "Deposit Virtual USD" : adminModule === "WITHDRAW_AGENT" ? "Withdraw Virtual USD" : adminModule === "ONLINE_CUSTOMER" ? "Online Customer Wallet" : adminModule === "RESULTS" ? "Results" : adminModule === "SETTLEMENT" ? "Settlement" : adminModule === "BET_ANALYZER" ? "Bet Analyzer" : adminModule === "CONTACT" ? "Contact" : adminModule === "PASSWORD_RESET" ? "Password Reset" : adminModule === "CORRECTION_CENTER" ? (correctionWorkflow === "UNSETTLED" ? "Unsettled Session Correction" : correctionWorkflow === "SETTLED" ? "Settled Session Correction" : "Result & Settlement Correction") : "Super Admin Dashboard"}</h1>
 <p>
 {adminModule === "AGENT_ADMIN"
   ? "Create and manage Agent Admin accounts."
@@ -8377,7 +8394,11 @@ const renderSuperAdminArea = () => (
               : adminModule === "SETTLEMENT"
                 ? "Settle result-declared game sessions and release customer exposure."
               : adminModule === "CORRECTION_CENTER"
-                ? "Review result and settlement impact before any financial correction."
+                ? (correctionWorkflow === "UNSETTLED"
+                    ? "Correct a declared result before settlement. Active bets must remain unchanged."
+                    : correctionWorkflow === "SETTLED"
+                      ? "Review a settled result and its financial impact. Reversal is not enabled until the dedicated safe workflow is ready."
+                      : "Choose the correction workflow based on whether settlement has completed.")
               : adminModule === "BET_ANALYZER"
                 ? "Select Game, Bazi and Date to analyze live betting activity."
               : adminModule === "AUDIT"
@@ -8397,6 +8418,16 @@ onClick={() => {
   } else if (adminModule === "AGENT_WALLET") {
     setAdminModule("HOME");
     setAdminError("");
+  } else if (adminModule === "CORRECTION_CENTER" && correctionWorkflow !== "HOME") {
+    setCorrectionWorkflow("HOME");
+    setCorrectionSessions([]);
+    setCorrectionSelectedSessionId("");
+    setCorrectionPreview(null);
+    setCorrectionNewSingleDigit("");
+    setCorrectionNewPatti("");
+    setCorrectionReason("");
+    setAdminError("");
+    setAdminSuccess("");
   } else if (adminModule === "RESULTS" || adminModule === "SETTLEMENT" || adminModule === "CORRECTION_CENTER") {
     setAdminModule("HOME");
     setAdminError("");
@@ -8465,7 +8496,7 @@ disabled={adminModule === "HOME" && adminLoading}
 <button className="admin-module-card" onClick={()=>{setAdminModule("AGENT_ADMIN");setAdminError("");}}><b>Agent Admin</b><small>Create Agent Admin accounts</small></button>
 <button className="admin-module-card" onClick={()=>{setAdminModule("PASSWORD_RESET");setAdminPasswordResetTarget("");setAdminPasswordResetPassword("");setAdminError("");setAdminSuccess("");}}><b>Password Reset</b><small>Agent Admin + Online Customer password reset</small></button>
 <button className="admin-module-card" onClick={()=>{setAdminModule("RESULTS");setResultGameId("");setResultDate("");setResultSessionId("");setResultSingleDigit("");setResultPatti("");setResultCurrent(null);setAdminError("");setAdminSuccess("");void loadResultsModule();}}><b>Results</b><small>Declare game results</small></button>
-<button className="admin-module-card" onClick={()=>{setAdminModule("CORRECTION_CENTER");setCorrectionPreview(null);setAdminError("");setAdminSuccess("");void loadCorrectionSessions();}}><b>Result &amp; Settlement Correction</b><small>Inspect current result, settlement and affected bets before correction</small></button>
+<button className="admin-module-card" onClick={()=>{setAdminModule("CORRECTION_CENTER");setCorrectionWorkflow("HOME");setCorrectionSessions([]);setCorrectionSelectedSessionId("");setCorrectionPreview(null);setAdminError("");setAdminSuccess("");}}><b>Result &amp; Settlement Correction</b><small>Choose Unsettled or Settled Session Correction</small></button>
 {[["Settlement","Settle market / Bazi"],["Bet Analyzer","Single / Patti / Jodi analysis"],["Reports","Betting activity reports"],["Audit","Traceable activity history"]].map(([title,sub])=><button key={title} className="admin-module-card" onClick={()=>{if(title==="Settlement"){setAdminModule("SETTLEMENT");setAdminError("");setAdminSuccess("");void loadSettlementModule();}else if(title==="Bet Analyzer"){setAdminModule("BET_ANALYZER");setBetAnalyzerView("ANALYZER");setBetAnalyzerRows([]);setBetAnalyzerOpenPanel("SINGLE");setBetAnalyzerDate(getLocalDateString());setBetAnalyzerGameId("");setBetAnalyzerBaziValue("");setBetAnalyzerSelectedSessionId("");setBetAnalyzerSelectedSession(null);setBetAnalyzerHadLiveData(false);setAdminError("");setAdminSuccess("");}else if(title==="Reports"){setAdminModule("REPORTS");setReportsRows([]);setReportsPage(0);setReportsTotal(0);setAdminError("");setAdminSuccess("");void loadSuperAdminReports(0);}else if(title==="Audit"){setAdminModule("AUDIT");setAuditView("HOME");setAuditTransactionRows([]);setAuditSettlementRows([]);setAuditTransactionPage(0);setAuditSettlementPage(0);setAuditTransactionHasNext(false);setAuditSettlementHasNext(false);setAdminError("");setAdminSuccess("");}else setAdminError(`${title} module is the next build step.`);}}><b>{title}</b><small>{sub}</small></button>)}
 </section>
 <section className="admin-supply-card">
@@ -9002,13 +9033,62 @@ Target supply: <b>1,000,000 virtual USD coins</b>. Use the Agent Wallet and Onli
 )}
 </>
 ) : adminModule === "CORRECTION_CENTER" ? (
+  correctionWorkflow === "HOME" ? (
+    <>
+      <section className="admin-panel-card">
+        <div className="admin-panel-title">CHOOSE CORRECTION WORKFLOW</div>
+        <p className="admin-account-detail-intro">
+          Select the workflow that matches the session. Unsettled correction does not reverse financial transactions.
+          Settled correction remains review-only until the dedicated atomic financial correction workflow is implemented and verified.
+        </p>
+        <div className="admin-module-grid" style={{ marginTop: 18 }}>
+          <button
+            type="button"
+            className="admin-module-card"
+            onClick={() => {
+              setCorrectionWorkflow("UNSETTLED");
+              setCorrectionPreview(null);
+              setCorrectionNewSingleDigit("");
+              setCorrectionNewPatti("");
+              setCorrectionReason("");
+              setAdminError("");
+              setAdminSuccess("");
+              void loadCorrectionSessions("UNSETTLED");
+            }}
+          >
+            <b>Unsettled Session Correction</b>
+            <small>Result declared; settlement has not started. Correct the result while preserving active bets and exposure.</small>
+          </button>
+          <button
+            type="button"
+            className="admin-module-card"
+            onClick={() => {
+              setCorrectionWorkflow("SETTLED");
+              setCorrectionPreview(null);
+              setCorrectionNewSingleDigit("");
+              setCorrectionNewPatti("");
+              setCorrectionReason("");
+              setAdminError("");
+              setAdminSuccess("");
+              void loadCorrectionSessions("SETTLED");
+            }}
+          >
+            <b>Settled Session Correction</b>
+            <small>Result and settlement completed. Review prior winnings, burns, reversals, Jodi and supply effects. Submission stays disabled.</small>
+          </button>
+        </div>
+      </section>
+    </>
+  ) : (
 <>
   <section className="admin-panel-card">
     <div className="admin-panel-title-row">
       <div>
-        <div className="admin-panel-title">RESULT &amp; SETTLEMENT CORRECTION CENTER</div>
+        <div className="admin-panel-title">{correctionWorkflow === "UNSETTLED" ? "UNSETTLED SESSION CORRECTION" : "SETTLED SESSION CORRECTION"}</div>
         <p className="admin-account-detail-intro" style={{ marginBottom: 0 }}>
-          Read-only preview of the selected session. This screen does not reverse transactions or change results.
+          {correctionWorkflow === "UNSETTLED"
+            ? "Correct a declared result before settlement. Active bets and exposure must remain unchanged."
+            : "Read-only financial impact review. Reversal and re-settlement remain disabled until the dedicated atomic workflow is ready."}
         </p>
       </div>
       <button type="button" className="admin-small-action" onClick={() => void loadCorrectionSessions()} disabled={correctionSessionsLoading || correctionPreviewLoading}>
@@ -9018,7 +9098,7 @@ Target supply: <b>1,000,000 virtual USD coins</b>. Use the Agent Wallet and Onli
 
     <div className="admin-form">
       <div className="admin-form-field">
-        <label>SESSION WITH CURRENT DECLARED RESULT</label>
+        <label>{correctionWorkflow === "UNSETTLED" ? "UNSETTLED SESSION WITH CURRENT DECLARED RESULT" : "SETTLED SESSION WITH CURRENT DECLARED RESULT"}</label>
         <select
           className="admin-form-input"
           value={correctionSelectedSessionId}
@@ -9046,7 +9126,7 @@ Target supply: <b>1,000,000 virtual USD coins</b>. Use the Agent Wallet and Onli
 
   {correctionPreview ? (
     <section className="admin-panel-card">
-      <div className="admin-panel-title">READ-ONLY CORRECTION IMPACT</div>
+      <div className="admin-panel-title">{correctionWorkflow === "UNSETTLED" ? "UNSETTLED CORRECTION PREVIEW" : "SETTLED CORRECTION — FINANCIAL IMPACT PREVIEW"}</div>
       <div className="admin-stat-grid">
         <div className="admin-stat-card"><span>SESSION STATUS</span><strong>{String(correctionPreview.session_status || "-")}</strong></div>
         <div className="admin-stat-card"><span>CURRENT RESULT</span><strong>{`${correctionPreview.current_single_digit ?? "-"} / ${correctionPreview.current_patti ?? "-"}`}</strong></div>
@@ -9062,8 +9142,9 @@ Target supply: <b>1,000,000 virtual USD coins</b>. Use the Agent Wallet and Onli
       <div className="admin-form-note" style={{ marginTop: 14 }}>
         Preview status: <b>{String(correctionPreview.correction_preview_status || "UNKNOWN")}</b>. Amounts are derived from settlement rows that are currently marked COMPLETED and SETTLED; this preview is not a ledger reconciliation and does not authorize correction.
       </div>
+      {correctionWorkflow === "UNSETTLED" ? (
       <div className="admin-form" style={{ marginTop: 16 }}>
-        <div className="admin-panel-title">CORRECTION REQUEST — PREPARATION ONLY</div>
+        <div className="admin-panel-title">UNSETTLED CORRECTION REQUEST</div>
         <div className="admin-form-field">
           <label>PROPOSED SINGLE DIGIT (0–9)</label>
           <input
@@ -9103,7 +9184,7 @@ Target supply: <b>1,000,000 virtual USD coins</b>. Use the Agent Wallet and Onli
           />
         </div>
         <div className="admin-form-note">
-          Submission is available only for CLOSED sessions with no settlement or bet activity. The database RPC rechecks eligibility and records the correction audit. Wallet, settlement and supply data are not changed by this workflow.
+          Submission is available only before settlement. ACTIVE bets are allowed and must remain unchanged; any existing settlement or non-ACTIVE bet item is rejected by the database RPC. Wallet, settlement and supply data are not changed by this workflow.
         </div>
         <button
           type="button"
@@ -9114,28 +9195,32 @@ Target supply: <b>1,000,000 virtual USD coins</b>. Use the Agent Wallet and Onli
             correctionSessionsLoading ||
             correctionPreviewLoading ||
             !correctionPreview ||
-            String(correctionPreview.session_status || "") !== "CLOSED" ||
+            !["CLOSED", "RESULT_DECLARED"].includes(String(correctionPreview.session_status || "")) ||
             Number(correctionPreview.completed_settlements || 0) > 0 ||
             Number(correctionPreview.reversed_settlements || 0) > 0 ||
-            Number(correctionPreview.active_bet_items || 0) > 0 ||
-            Number(correctionPreview.affected_bet_items || 0) > 0 ||
             !/^[0-9]$/.test(correctionNewSingleDigit) ||
             !/^[0-9]{3}$/.test(correctionNewPatti) ||
             (correctionNewSingleDigit === String(correctionPreview.current_single_digit ?? "") &&
               correctionNewPatti === String(correctionPreview.current_patti ?? "")) ||
             !correctionReason.trim()
           }
-          title="Only CLOSED sessions with no settlement or bet activity can be corrected."
+          title="Only unsettled CLOSED or RESULT_DECLARED sessions can be corrected. Active bets remain in place."
         >
           {correctionSubmitLoading ? "SUBMITTING CORRECTION..." : "SUBMIT CORRECTION"}
         </button>
       </div>
-      <div className="admin-error" style={{ marginTop: 12 }}>
-        Settled financial correction is not enabled. Do not reverse or re-settle a session until a dedicated atomic correction RPC accounts for original wallet transactions, prior reversals, Jodi dependencies and supply/refill effects.
-      </div>
+      ) : (
+        <div className="admin-error" style={{ marginTop: 16 }}>
+          <strong>SETTLED FINANCIAL CORRECTION IS REVIEW-ONLY.</strong>
+          <p style={{ marginBottom: 0 }}>
+            Do not submit a correction, reverse transactions, or re-run settlement yet. A dedicated atomic backend workflow must account for original wallet transactions, prior reversals, Jodi dependencies, burn accounting, and supply/refill effects before this module can safely execute changes.
+          </p>
+        </div>
+      )}
     </section>
   ) : null}
 </>
+  )
 ) : adminModule === "SETTLEMENT" ? (
 <>
 <section className="admin-panel-card">
