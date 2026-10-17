@@ -123,10 +123,17 @@ const betRatesByGame: Record<GameName, Record<BetType, number>> = {
     "Triple Patti": 300,
     Jodi: 85,
   },
+  "PK Main Mumbai": {
+    Single: 9,
+    "Single Patti": 125,
+    "Double Patti": 200,
+    "Triple Patti": 300,
+    Jodi: 85,
+  },
 };
 
 const getBetRate = (game: string, type: BetType): number => {
-  if (game === "Main Bazar" || game === "Dus ka Dum" || game === "Kolkata Fatafat") {
+  if (game === "Main Bazar" || game === "Dus ka Dum" || game === "Kolkata Fatafat" || game === "PK Main Mumbai") {
     return betRatesByGame[game][type];
   }
   return betRatesByGame["Main Bazar"][type];
@@ -678,7 +685,7 @@ type Page =
 | "statement";
 
 
-type GameName = "Main Bazar" | "Kolkata Fatafat" | "Dus ka Dum";
+type GameName = "Main Bazar" | "Kolkata Fatafat" | "Dus ka Dum" | "PK Main Mumbai";
 
 
 type BetType =
@@ -1791,7 +1798,7 @@ type TodayPlayableSession = {
   id: string;
    session_code: string;
   game_id: string;
-  game: "Main Bazar" | "Kolkata Fatafat" | "Dus ka Dum";
+  game: GameName;
   bazi_no: number | null;
   market: string;
   opening_time: string;
@@ -1804,7 +1811,7 @@ const [todaySessionsReady, setTodaySessionsReady] = useState(false);
 type TodayGameResult = {
   session_id: string;
   game_id: string;
-  game: "Main Bazar" | "Kolkata Fatafat" | "Dus ka Dum";
+  game: GameName;
   bazi_no: number | null;
   market: string;
   single_digit: number;
@@ -1995,6 +2002,8 @@ const loadTodayPlayableSessions = async (sessionDate = getLocalDateString()) => 
           game = "Kolkata Fatafat";
         } else if (gameName.includes("dus")) {
           game = "Dus ka Dum";
+        } else if (gameName.includes("pk main mumbai")) {
+          game = "PK Main Mumbai";
         } else if (gameName.includes("main bazar")) {
           game = "Main Bazar";
         }
@@ -2048,6 +2057,8 @@ const loadTodayGameResults = async () => {
           game = "Kolkata Fatafat";
         } else if (rawGame.includes("dus")) {
           game = "Dus ka Dum";
+        } else if (rawGame.includes("pk main mumbai")) {
+          game = "PK Main Mumbai";
         } else if (rawGame.includes("main bazar")) {
           game = "Main Bazar";
         }
@@ -2234,6 +2245,7 @@ const loadCustomerResultHistory = async () => {
       const raw = String(game.game_name || "").trim().toLowerCase();
       if (raw.includes("kolkata")) gameMap.set(String(game.id), "Kolkata Fatafat");
       else if (raw.includes("dus")) gameMap.set(String(game.id), "Dus ka Dum");
+      else if (raw.includes("pk main mumbai")) gameMap.set(String(game.id), "PK Main Mumbai");
       else if (raw.includes("main bazar")) gameMap.set(String(game.id), "Main Bazar");
     }
 
@@ -2244,6 +2256,7 @@ const loadCustomerResultHistory = async () => {
       ["17d967ee-8c0b-4ebb-9169-576f2813044b", "Main Bazar"],
       ["00128f60-5bae-4d20-87b9-71c0ed880a9e", "Kolkata Fatafat"],
       ["b51fa0a9-d988-4e15-91be-804554a65e7d", "Dus ka Dum"],
+      ["6e790afb-07da-40c3-ba3a-d895a1bad87d", "PK Main Mumbai"],
     ]);
 
     const resultMap = new Map<string, any>();
@@ -2378,7 +2391,7 @@ const getTodayGameResult = (
   return (
     todayGameResults.find((result) => {
       if (result.game !== game) return false;
-      if (game === "Main Bazar") {
+      if (game === "Main Bazar" || game === "PK Main Mumbai") {
         return result.market.toUpperCase() === market.toUpperCase();
       }
       return result.bazi_no === bazi;
@@ -2435,7 +2448,7 @@ const isGameAvailableToday = (
 ) => {
   return todayPlayableSessions.some((session) => {
     if (session.game !== game) return false;
-    if (game === "Main Bazar") {
+    if (game === "Main Bazar" || game === "PK Main Mumbai") {
       return session.market.toUpperCase() === market.toUpperCase();
     }
     return session.bazi_no === bazi;
@@ -2450,7 +2463,7 @@ const getSessionStatus = (
   const session = todayPlayableSessions.find((item) => {
     if (item.game !== game) return false;
 
-    if (game === "Main Bazar") {
+    if (game === "Main Bazar" || game === "PK Main Mumbai") {
       return item.market.toUpperCase() === market.toUpperCase();
     }
 
@@ -3063,7 +3076,7 @@ const getGameSessionCount = (game: GameName) =>
   todayPlayableSessions.filter((session) => session.game === game).length;
 
 const getGameScheduleLabel = (game: GameName) => {
-  if (game === "Main Bazar") return "Open / Close";
+  if (game === "Main Bazar" || game === "PK Main Mumbai") return "Open / Close";
   if (game === "Kolkata Fatafat") return dayNumber === 0 ? "Bazi 1–4" : "Bazi 1–8";
   return dayNumber === 0 ? "Bazi 1–5" : "Bazi 1–10";
 };
@@ -3072,10 +3085,10 @@ const getGameScheduleLabel = (game: GameName) => {
 const getBetTitle = () => {
 
 
-if (selectedGame === "Main Bazar") {
+if (selectedGame === "Main Bazar" || selectedGame === "PK Main Mumbai") {
 
 
-return `Main Bazar ${selectedMarket}`;
+return `${selectedGame} ${selectedMarket}`;
 
 
 }
@@ -3116,7 +3129,7 @@ bazi: number | null = null
 
 const session = todayPlayableSessions.find((item) => {
   if (item.game !== game) return false;
-  if (game === "Main Bazar") {
+  if (game === "Main Bazar" || game === "PK Main Mumbai") {
     return item.market.toUpperCase() === market.toUpperCase();
   }
   return item.bazi_no === bazi;
@@ -3396,7 +3409,7 @@ const now = new Date();
 const session = todayPlayableSessions.find((item) => {
 if (item.game !== selectedGame) return false;
 
-if (selectedGame === "Main Bazar") {
+if (selectedGame === "Main Bazar" || selectedGame === "PK Main Mumbai") {
 return (
 item.market.toUpperCase() ===
 selectedMarket.toUpperCase()
@@ -3670,10 +3683,7 @@ selectedGame ===
 ? selectedBazi === 10
 
 
-: selectedGame ===
-
-
-"Main Bazar"
+: (selectedGame === "Main Bazar" || selectedGame === "PK Main Mumbai")
 
 
 ? selectedMarket === "CLOSE"
@@ -3685,7 +3695,7 @@ selectedGame ===
 
 const renderPublicGameCards = () => (
   <div className="public-game-selector-grid">
-    {(["Main Bazar", "Kolkata Fatafat", "Dus ka Dum"] as GameName[]).map((game) => {
+    {(["Main Bazar", "Kolkata Fatafat", "Dus ka Dum", "PK Main Mumbai"] as GameName[]).map((game) => {
       const status = getGameSessionStatus(game);
       const count = getGameSessionCount(game);
       const isSelected = publicSelectedGame === game;
@@ -3693,8 +3703,8 @@ const renderPublicGameCards = () => (
         <Fragment key={game}>
           <button type="button" className={`public-game-selector ${isSelected ? "selected" : ""}`} onClick={() => setPublicSelectedGame((current) => (current === game ? null : game))}>
             <div className="public-game-selector-top">
-              <span className={`public-game-selector-icon ${game === "Main Bazar" ? "main" : game === "Kolkata Fatafat" ? "kolkata" : "dus"}`}>
-                {game === "Main Bazar" ? "♛" : game === "Kolkata Fatafat" ? "♜" : "🎲"}
+              <span className={`public-game-selector-icon ${game === "Main Bazar" ? "main" : game === "Kolkata Fatafat" ? "kolkata" : game === "PK Main Mumbai" ? "main" : "dus"}`}>
+                {game === "Main Bazar" || game === "PK Main Mumbai" ? "♛" : game === "Kolkata Fatafat" ? "♜" : "🎲"}
               </span>
               <span className={`public-game-selector-status ${status === "OPEN FOR BETTING" ? "open" : status === "LOCKED" ? "locked" : "off"}`}>{status}</span>
             </div>
@@ -3724,6 +3734,36 @@ const renderPublicMainMarket = (market: string, deadline: string) => {
   );
 };
 
+const renderPublicMarketForGame = (game: "Main Bazar" | "PK Main Mumbai", market: string, deadline: string) => {
+  if (game === "Main Bazar") return renderPublicMainMarket(market, deadline);
+  const available = isGameAvailableToday(game, null, market);
+  const running = getSessionStatus(game, null, market) === "RUNNING";
+  return (
+    <div className="public-session-card">
+      <div className="public-session-top"><strong>{market}</strong><span>Deadline {deadline}</span></div>
+      <div className={running ? "public-session-status open" : available ? "public-session-status locked" : "public-session-status off"}>
+        {running ? <><span className="green-dot" /> OPEN FOR BETTING</> : available ? "LOCKED" : "GAME OFF"}
+      </div>
+      <div className="result-line">Result: <span className="result-value">{formatTodayResult(getTodayGameResult(game, null, market))}</span></div>
+      {running ? <button className="play-btn" onClick={openLogin}>LOGIN TO PLAY</button> : null}
+    </div>
+  );
+};
+
+const renderMainMarketForGame = (game: "Main Bazar" | "PK Main Mumbai", market: string, time: string) => {
+  if (game === "Main Bazar") return renderMainMarket(market, time);
+  const available = isGameAvailableToday(game, null, market);
+  const running = getSessionStatus(game, null, market) === "RUNNING";
+  return (
+    <button className={running ? "customer-market running" : "customer-market locked"} disabled={!running} onClick={() => running && openBetting(game, market, null)}>
+      <div className="customer-market-top"><span>{market}</span><span>{time}</span></div>
+      <div className="customer-market-status">{running ? "OPEN FOR BETTING" : available ? "BETTING CLOSED" : "GAME OFF"}</div>
+      <div className="customer-result-line"><span>RESULT</span><strong>{formatTodayResult(getTodayGameResult(game, null, market))}</strong></div>
+      {running ? <div className="customer-play-action">TAP TO PLAY</div> : null}
+    </button>
+  );
+};
+
 const renderPublicBazi = (game: "Kolkata Fatafat" | "Dus ka Dum", bazi: { no: number; time: string }) => {
   const available = isGameAvailableToday(game, bazi.no);
   const running = getSessionStatus(game, bazi.no) === "RUNNING";
@@ -3746,8 +3786,8 @@ const renderPublicSelectedGame = () => {
   const configuredDus = dayNumber === 0 ? dusBazi.slice(0, 5) : dusBazi;
   return (
     <section className="public-selected-game-card">
-      {game === "Main Bazar" ? (
-        <div className="public-session-grid">{mainBazarMarkets.map((market) => renderPublicMainMarket(market.market, market.time))}</div>
+      {game === "Main Bazar" || game === "PK Main Mumbai" ? (
+        <div className="public-session-grid">{(game === "PK Main Mumbai" ? [{ market: "OPEN", time: "9:15 PM" }, { market: "CLOSE", time: "11:15 PM" }] : mainBazarMarkets).map((market) => renderPublicMarketForGame(game, market.market, market.time))}</div>
       ) : game === "Kolkata Fatafat" ? (
         <div className="public-session-grid">{configuredKolkata.map((bazi) => renderPublicBazi("Kolkata Fatafat", bazi))}</div>
       ) : (
@@ -4462,7 +4502,7 @@ CUSTOMER HOME
 
 const renderCustomerGameCards = () => (
   <div className="customer-game-selector-grid">
-    {(["Main Bazar", "Kolkata Fatafat", "Dus ka Dum"] as GameName[]).map((game) => {
+    {(["Main Bazar", "Kolkata Fatafat", "Dus ka Dum", "PK Main Mumbai"] as GameName[]).map((game) => {
       const status = getGameSessionStatus(game);
       const count = getGameSessionCount(game);
       const isSelected = customerSelectedGame === game;
@@ -4470,8 +4510,8 @@ const renderCustomerGameCards = () => (
         <Fragment key={game}>
           <button type="button" className={`customer-game-selector ${isSelected ? "selected" : ""}`} onClick={() => selectCustomerGame(game)}>
             <div className="customer-game-selector-top">
-              <span className={`customer-game-selector-icon ${game === "Main Bazar" ? "main" : game === "Kolkata Fatafat" ? "kolkata" : "dus"}`}>
-                {game === "Main Bazar" ? "♛" : game === "Kolkata Fatafat" ? "♜" : "🎲"}
+              <span className={`customer-game-selector-icon ${game === "Main Bazar" ? "main" : game === "Kolkata Fatafat" ? "kolkata" : game === "PK Main Mumbai" ? "main" : "dus"}`}>
+                {game === "Main Bazar" || game === "PK Main Mumbai" ? "♛" : game === "Kolkata Fatafat" ? "♜" : "🎲"}
               </span>
               <span className={`customer-game-selector-status ${status === "OPEN FOR BETTING" ? "open" : status === "LOCKED" ? "locked" : "off"}`}>{status}</span>
             </div>
@@ -4494,8 +4534,8 @@ const renderCustomerSelectedGame = () => {
 
   return (
     <section className="customer-selected-game-card">
-      {game === "Main Bazar" ? (
-        <div className="customer-main-grid">{mainBazarMarkets.map((market) => renderMainMarket(market.market, market.time))}</div>
+      {game === "Main Bazar" || game === "PK Main Mumbai" ? (
+        <div className="customer-main-grid">{(game === "PK Main Mumbai" ? [{ market: "OPEN", time: "9:15 PM" }, { market: "CLOSE", time: "11:15 PM" }] : mainBazarMarkets).map((market) => renderMainMarketForGame(game, market.market, market.time))}</div>
       ) : game === "Kolkata Fatafat" ? (
         <div className="customer-bazi-grid">{configuredKolkata.map((bazi) => renderBaziBox("Kolkata Fatafat", bazi))}</div>
       ) : (
@@ -5003,8 +5043,8 @@ $
 <div className="context-game-row">
 
 
-<span className={`context-game-icon ${selectedGame === "Main Bazar" ? "main" : selectedGame === "Kolkata Fatafat" ? "kolkata" : "dus"}`} aria-hidden="true">
-  {selectedGame === "Main Bazar" ? "♛" : selectedGame === "Kolkata Fatafat" ? "♜" : "🎲"}
+<span className={`context-game-icon ${selectedGame === "Main Bazar" || selectedGame === "PK Main Mumbai" ? "main" : selectedGame === "Kolkata Fatafat" ? "kolkata" : "dus"}`} aria-hidden="true">
+  {selectedGame === "Main Bazar" || selectedGame === "PK Main Mumbai" ? "♛" : selectedGame === "Kolkata Fatafat" ? "♜" : "🎲"}
 </span>
 
 
@@ -5966,9 +6006,9 @@ const getCustomerResultForSession = (date: string, game: GameName, bazi: number 
     (market ? row.market === market : true)
   ) || null;
 
-const renderMainBazarResultCell = (date: string) => {
-  const open = getCustomerResultForSession(date, "Main Bazar", null, "OPEN");
-  const close = getCustomerResultForSession(date, "Main Bazar", null, "CLOSE");
+const renderMainBazarResultCell = (date: string, game: GameName = "Main Bazar") => {
+  const open = getCustomerResultForSession(date, game, null, "OPEN");
+  const close = getCustomerResultForSession(date, game, null, "CLOSE");
 
   return (
     <div className="customer-result-main-cell">
@@ -5987,7 +6027,7 @@ const renderMainBazarResultCell = (date: string) => {
   );
 };
 
-const renderMainBazarResults = () => {
+const renderMainBazarResults = (game: GameName = "Main Bazar") => {
   const weeks = getCustomerMainWeeks();
   const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri"];
 
@@ -6011,7 +6051,7 @@ const renderMainBazarResults = () => {
                 </div>
                 {week.map((date) => (
                   <div className="customer-result-main-day" key={`${weekIndex}-${date}`}>
-                    {renderMainBazarResultCell(date)}
+                    {renderMainBazarResultCell(date, game)}
                   </div>
                 ))}
               </div>
@@ -6074,7 +6114,7 @@ const renderResultPage = () => (
       </div>
 
       <div className="customer-result-game-tabs">
-        {(["Main Bazar", "Kolkata Fatafat", "Dus ka Dum"] as GameName[]).map((game) => (
+        {(["Main Bazar", "Kolkata Fatafat", "Dus ka Dum", "PK Main Mumbai"] as GameName[]).map((game) => (
           <button
             key={game}
             type="button"
@@ -6090,8 +6130,8 @@ const renderResultPage = () => (
         <div className="customer-result-empty">Loading result history...</div>
       ) : customerResultsError ? (
         <div className="customer-result-empty">Unable to load result history.</div>
-      ) : customerResultGame === "Main Bazar" ? (
-        renderMainBazarResults()
+      ) : customerResultGame === "Main Bazar" || customerResultGame === "PK Main Mumbai" ? (
+        renderMainBazarResults(customerResultGame)
       ) : customerResultGame === "Kolkata Fatafat" ? (
         renderCustomerDailyResults("Kolkata Fatafat")
       ) : customerResultGame === "Dus ka Dum" ? (
