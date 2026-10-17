@@ -1000,6 +1000,9 @@ const [correctionSessions, setCorrectionSessions] = useState<Array<{
 }>>([]);
 const [correctionWorkflow, setCorrectionWorkflow] = useState<"HOME" | "UNSETTLED" | "SETTLED">("HOME");
 const [correctionSelectedSessionId, setCorrectionSelectedSessionId] = useState("");
+const [correctionGameName, setCorrectionGameName] = useState("");
+const [correctionBaziValue, setCorrectionBaziValue] = useState("");
+const [correctionDate, setCorrectionDate] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; });
 const [correctionSessionsLoading, setCorrectionSessionsLoading] = useState(false);
 const [correctionPreviewLoading, setCorrectionPreviewLoading] = useState(false);
 const [correctionSubmitLoading, setCorrectionSubmitLoading] = useState(false);
@@ -7605,7 +7608,7 @@ const loadCorrectionSessions = async (workflow: "UNSETTLED" | "SETTLED" = correc
       if (!result) return null;
       const statuses = settlementMap.get(String(row.id)) || [];
       const hasSettlement = statuses.length > 0;
-      const hasCompletedSettlement = statuses.some((status) => status === "COMPLETED" || status === "REVERSED");
+      const hasCompletedSettlement = statuses.some((status) => status === "COMPLETED");
       if (workflow === "UNSETTLED" && hasSettlement) return null;
       if (workflow === "SETTLED" && !hasCompletedSettlement) return null;
       return {
@@ -7627,9 +7630,12 @@ const loadCorrectionSessions = async (workflow: "UNSETTLED" | "SETTLED" = correc
     }>;
 
     setCorrectionSessions(rows);
-    setCorrectionSelectedSessionId((current) =>
-      rows.some((row) => row.id === current) ? current : (rows[0]?.id || "")
-    );
+    const currentRow = rows.find((row) => row.id === correctionSelectedSessionId);
+    const initialRow = currentRow || rows[0];
+    setCorrectionSelectedSessionId(initialRow?.id || "");
+    setCorrectionGameName(initialRow?.game_name || "");
+    setCorrectionBaziValue(initialRow ? String(initialRow.bazi_no ?? initialRow.market) : "");
+    setCorrectionDate(initialRow?.session_date || getLocalDateString());
   } catch (error: any) {
     setCorrectionSessions([]);
     setCorrectionSelectedSessionId("");
@@ -7639,8 +7645,8 @@ const loadCorrectionSessions = async (workflow: "UNSETTLED" | "SETTLED" = correc
   }
 };
 
-const runCorrectionPreview = async () => {
-  if (!correctionSelectedSessionId) {
+const runCorrectionPreview = async (sessionId = correctionSelectedSessionId) => {
+  if (!sessionId) {
     setAdminError("Select a session before loading correction preview.");
     return;
   }
@@ -7650,7 +7656,7 @@ const runCorrectionPreview = async () => {
   setCorrectionPreview(null);
   try {
     const { data, error } = await supabase.rpc("preview_result_correction", {
-      p_session_id: correctionSelectedSessionId,
+      p_session_id: sessionId,
     });
     if (error) throw error;
     const row = Array.isArray(data) ? data[0] : data;
@@ -9097,29 +9103,58 @@ Target supply: <b>1,000,000 virtual USD coins</b>. Use the Agent Wallet and Onli
     </div>
 
     <div className="admin-form">
+      <div className="bet-analyzer-selector-grid">
+        <div className="admin-form-field">
+          <label>SELECT GAME</label>
+          <select className="admin-form-input" value={correctionGameName} onChange={(event) => {
+            const nextGame = event.target.value;
+            const nextRows = correctionSessions.filter((row) => row.game_name === nextGame);
+            setCorrectionGameName(nextGame);
+            setCorrectionBaziValue(nextRows[0] ? String(nextRows[0].bazi_no ?? nextRows[0].market) : "");
+            setCorrectionSelectedSessionId(""); setCorrectionPreview(null);
+          }} disabled={correctionSessionsLoading || correctionPreviewLoading}>
+            <option value="">Select Game</option>
+            {[...new Set(correctionSessions.map((row) => row.game_name))].map((name) => <option key={name} value={name}>{name}</option>)}
+          </select>
+        </div>
+        <div className="admin-form-field">
+          <label>SELECT BAZI</label>
+          <select className="admin-form-input" value={correctionBaziValue} onChange={(event) => {
+            setCorrectionBaziValue(event.target.value); setCorrectionSelectedSessionId(""); setCorrectionPreview(null);
+          }} disabled={!correctionGameName || correctionSessionsLoading || correctionPreviewLoading}>
+            <option value="">Select Bazi</option>
+            {[...new Map(correctionSessions.filter((row) => row.game_name === correctionGameName).map((row) => [String(row.bazi_no ?? row.market), row.bazi_no != null ? `Bazi ${row.bazi_no}` : row.market])).entries()].map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </div>
+        <div className="admin-form-field">
+          <label>SELECT DATE</label>
+          <input className="admin-form-input" type="date" value={correctionDate} onChange={(event) => {
+            setCorrectionDate(event.target.value); setCorrectionSelectedSessionId(""); setCorrectionPreview(null);
+          }} disabled={correctionSessionsLoading || correctionPreviewLoading} />
+        </div>
+      </div>
+      <div className="admin-form-note">{correctionWorkflow === "UNSETTLED" ? "Only sessions with a current declared result and no settlement record are eligible." : "Only sessions with a current declared result and completed settlement are eligible. Financial correction remains read-only."}</div>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <button type="button" className="admin-create-btn" onClick={() => {
+          const match = correctionSessions.find((row) => row.game_name === correctionGameName && String(row.bazi_no ?? row.market) === correctionBaziValue && row.session_date === correctionDate);
+          if (!match) { setCorrectionSelectedSessionId(""); setCorrectionPreview(null); setAdminError("No eligible session matches the selected Game, Bazi and Date."); return; }
+          setCorrectionSelectedSessionId(match.id); setCorrectionPreview(null); setAdminError("");
+          void runCorrectionPreview(match.id);
+        }} disabled={correctionSessionsLoading || correctionPreviewLoading || !correctionGameName || !correctionBaziValue || !correctionDate}>
+          {correctionPreviewLoading ? "LOADING SESSION..." : "LOAD SESSION"}
+        </button>
+      </div>
       <div className="admin-form-field">
-        <label>{correctionWorkflow === "UNSETTLED" ? "UNSETTLED SESSION WITH CURRENT DECLARED RESULT" : "SETTLED SESSION WITH CURRENT DECLARED RESULT"}</label>
-        <select
-          className="admin-form-input"
-          value={correctionSelectedSessionId}
-          onChange={(event) => { setCorrectionSelectedSessionId(event.target.value); setCorrectionPreview(null); }}
-          disabled={correctionSessionsLoading || correctionPreviewLoading}
-        >
-          <option value="">Select session</option>
-          {correctionSessions.map((session) => (
-            <option key={session.id} value={session.id}>
-              {session.session_date} — {session.game_name}{session.bazi_no != null ? ` — Bazi ${session.bazi_no}` : ` — ${session.market}`} — Result {session.single_digit}/{session.patti} — v{session.version_no}
-            </option>
+        <label>{correctionWorkflow === "UNSETTLED" ? "MATCHED UNSETTLED SESSION" : "MATCHED SETTLED SESSION"}</label>
+        <select className="admin-form-input" value={correctionSelectedSessionId} onChange={(event) => { setCorrectionSelectedSessionId(event.target.value); setCorrectionPreview(null); }} disabled={correctionSessionsLoading || correctionPreviewLoading}>
+          <option value="">Select matching session</option>
+          {correctionSessions.filter((session) => session.game_name === correctionGameName && String(session.bazi_no ?? session.market) === correctionBaziValue && session.session_date === correctionDate).map((session) => (
+            <option key={session.id} value={session.id}>{session.session_date} — {session.game_name}{session.bazi_no != null ? ` — Bazi ${session.bazi_no}` : ` — ${session.market}`} — Result {session.single_digit}/{session.patti} — v{session.version_no}</option>
           ))}
         </select>
       </div>
       <div className="admin-form-note">
         Preview requires the logged-in Super Admin session. SQL Editor calls have no auth.uid() and are expected to fail authentication.
-      </div>
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-        <button type="button" className="admin-create-btn" onClick={() => void runCorrectionPreview()} disabled={!correctionSelectedSessionId || correctionSessionsLoading || correctionPreviewLoading}>
-          {correctionPreviewLoading ? "LOADING PREVIEW..." : "LOAD CORRECTION PREVIEW"}
-        </button>
       </div>
     </div>
   </section>
