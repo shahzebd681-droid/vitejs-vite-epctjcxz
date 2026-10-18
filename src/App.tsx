@@ -4557,12 +4557,27 @@ const renderCustomerHome = () => (
   <>
     {renderCustomerHeader()}
     <main className="customer-main">
-      <div className="customer-welcome">
-        <div>
+      <div className="customer-welcome customer-welcome-support">
+        <div className="customer-welcome-main">
           <div className="customer-welcome-title">Welcome, {customerName}</div>
-          <div className="customer-welcome-sub">Select a game to view its sessions and start your virtual play.</div>
         </div>
-        <div className="customer-live">LIVE</div>
+        <div className="customer-welcome-divider" aria-hidden="true"></div>
+        <a
+          className="customer-welcome-whatsapp"
+          href={contactWhatsappLink || undefined}
+          target={contactWhatsappLink ? "_blank" : undefined}
+          rel={contactWhatsappLink ? "noopener noreferrer" : undefined}
+          aria-disabled={!contactWhatsappLink}
+          onClick={(e) => { if (!contactWhatsappLink) e.preventDefault(); }}
+        >
+          <span className="customer-welcome-whatsapp-icon" aria-hidden="true">
+            <svg viewBox="0 0 32 32" role="img" focusable="false">
+              <path d="M16 3.2A12.2 12.2 0 0 0 5.5 21.6L4 28l6.6-1.7A12.2 12.2 0 1 0 16 3.2Z" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round"/>
+              <path d="M11.1 9.7c-.4-.9-.8-.9-1.2-.9h-1c-.4 0-.9.2-1.2.7-.4.5-1.6 1.6-1.6 3.9s1.7 4.5 1.9 4.8c.2.3 3.3 5.3 8.2 7.2 4 1.6 4.9 1.3 5.8 1.2.9-.1 2.9-1.2 3.3-2.3.4-1.1.4-2.1.3-2.3-.1-.2-.4-.3-.9-.6s-2.9-1.4-3.4-1.6c-.5-.2-.8-.3-1.1.3-.3.5-1.2 1.6-1.5 1.9-.3.3-.6.4-1.1.1-.5-.3-2.1-.8-4-2.5-1.5-1.3-2.5-2.9-2.8-3.4-.3-.5 0-.8.2-1 .2-.2.5-.6.8-.9.3-.3.4-.5.5-.8.2-.3.1-.6 0-.9-.1-.3-1.1-2.7-1.5-3.7Z" fill="currentColor" transform="translate(4 2) scale(.78)"/>
+            </svg>
+          </span>
+          <span className="customer-welcome-contact-text">Need Help? <strong>Contact Us</strong></span>
+        </a>
       </div>
       <div className="customer-section-title">TODAY'S GAMES</div>
       {renderCustomerGameCards()}
@@ -17477,6 +17492,81 @@ color: #111;
 }
 
 `}
+
+
+
+/* Focused customer Welcome support layout: matches the supplied reference. */
+.customer-welcome.customer-welcome-support{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  min-height:92px;
+  padding:20px 20px;
+  text-align:left;
+}
+.customer-welcome-main{
+  flex:1 1 auto;
+  min-width:0;
+}
+.customer-welcome.customer-welcome-support .customer-welcome-title{
+  font-size:clamp(16px, 4.2vw, 29px);
+  line-height:1.25;
+  white-space:normal;
+}
+.customer-welcome-divider{
+  align-self:stretch;
+  flex:0 0 1px;
+  min-height:66px;
+  background:rgba(226,230,236,.48);
+}
+.customer-welcome-whatsapp{
+  flex:0 0 31%;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  min-width:0;
+  color:#e9edf1;
+  text-decoration:none;
+  text-align:center;
+}
+.customer-welcome-whatsapp[aria-disabled="true"]{
+  cursor:default;
+}
+.customer-welcome-whatsapp-icon{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  width:58px;
+  height:58px;
+  border:2px solid #12e76a;
+  border-radius:50%;
+  color:#f5fff8;
+  background:rgba(0,220,100,.06);
+  box-shadow:0 0 7px rgba(18,231,106,.8), inset 0 0 5px rgba(18,231,106,.18);
+}
+.customer-welcome-whatsapp-icon svg{
+  display:block;
+  width:33px;
+  height:33px;
+}
+.customer-welcome-contact-text{
+  font-size:clamp(10px, 2.7vw, 16px);
+  line-height:1.3;
+  white-space:nowrap;
+}
+.customer-welcome-contact-text strong{
+  color:#00e676;
+  font-weight:700;
+}
+@media (max-width:380px){
+  .customer-welcome.customer-welcome-support{padding:15px 12px;gap:9px;}
+  .customer-welcome-whatsapp{flex-basis:34%;}
+  .customer-welcome-whatsapp-icon{width:50px;height:50px;}
+  .customer-welcome-whatsapp-icon svg{width:29px;height:29px;}
+}
 
 </style>
 
