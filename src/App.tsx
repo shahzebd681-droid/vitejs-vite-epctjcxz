@@ -17491,10 +17491,6 @@ color: #111;
   .customer-primary-bottom-nav button{height:58px !important;font-size:10px !important;}
 }
 
-`}
-
-
-
 /* Focused customer Welcome support layout: matches the supplied reference. */
 .customer-welcome.customer-welcome-support{
   display:flex;
@@ -17567,6 +17563,11 @@ color: #111;
   .customer-welcome-whatsapp-icon{width:50px;height:50px;}
   .customer-welcome-whatsapp-icon svg{width:29px;height:29px;}
 }
+
+`}
+
+
+
 
 </style>
 
