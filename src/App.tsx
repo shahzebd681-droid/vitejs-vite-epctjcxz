@@ -1299,10 +1299,116 @@ const runGameOffForSelectedDate = async () => {
     return;
   }
   const game = gameSettingsGames.find((item) => item.id === gameSettingsGameId);
-  const confirmed = window.confirm(
-    `GAME OFF CONFIRMATION\n\nGame: ${game?.game_name || "Selected game"}\nDate: ${gameSettingsDate}\nSessions listed: ${gameSettingsSessions.length}\n\nEligible unsettled sessions may be switched OFF and eligible active stakes refunded. Sessions with a declared result or settlement are skipped. Continue?`
-  );
-  if (!confirmed) return;
+
+  // Read-only preflight: calculate the current impact before asking for confirmation.
+  // The backend remains authoritative and rechecks eligibility when the action runs.
+  try {
+    const sessionsResult = await supabase
+      .from("game_sessions")
+      .select("id, status, scheduled_playable, deadline_at")
+      .eq("game_id", gameSettingsGameId)
+      .eq("session_date", gameSettingsDate)
+      .eq("scheduled_playable", true)
+      .in("status", ["SCHEDULED", "OPEN", "CLOSED"]);
+    if (sessionsResult.error) throw sessionsResult.error;
+
+    const candidateSessions = sessionsResult.data || [];
+    const candidateSessionIds = candidateSessions.map((session: any) => String(session.id));
+    let protectedSessionIds = new Set<string>();
+    let eligibleSessionIds = candidateSessionIds;
+    let eligibleItems: Array<{ id: string; session_id: string; stake: number | string }> = [];
+
+    if (candidateSessionIds.length > 0) {
+      const [resultsResult, settlementsResult] = await Promise.all([
+        supabase
+          .from("results")
+          .select("session_id")
+          .in("session_id", candidateSessionIds)
+          .eq("is_current", true)
+          .eq("status", "DECLARED"),
+        supabase
+          .from("settlements")
+          .select("session_id")
+          .in("session_id", candidateSessionIds),
+      ]);
+      if (resultsResult.error) throw resultsResult.error;
+      if (settlementsResult.error) throw settlementsResult.error;
+
+      protectedSessionIds = new Set<string>([
+        ...(resultsResult.data || []).map((row: any) => String(row.session_id)),
+        ...(settlementsResult.data || []).map((row: any) => String(row.session_id)),
+      ]);
+      eligibleSessionIds = candidateSessionIds.filter((id) => !protectedSessionIds.has(id));
+
+      if (eligibleSessionIds.length > 0) {
+        const activeItemsResult = await supabase
+          .from("bet_items")
+          .select("id, session_id, stake")
+          .in("session_id", eligibleSessionIds)
+          .eq("status", "ACTIVE");
+        if (activeItemsResult.error) throw activeItemsResult.error;
+
+        const activeItems = (activeItemsResult.data || []) as Array<{
+          id: string; session_id: string; stake: number | string;
+        }>;
+        const activeItemIds = activeItems.map((item) => String(item.id));
+
+        if (activeItemIds.length > 0) {
+          const [settlementItemsResult, refundsResult] = await Promise.all([
+            supabase
+              .from("settlement_items")
+              .select("bet_item_id")
+              .in("bet_item_id", activeItemIds),
+            supabase
+              .from("refund_transactions")
+              .select("bet_item_id")
+              .in("bet_item_id", activeItemIds),
+          ]);
+          if (settlementItemsResult.error) throw settlementItemsResult.error;
+          if (refundsResult.error) throw refundsResult.error;
+
+          const alreadySettledItemIds = new Set<string>(
+            (settlementItemsResult.data || []).map((row: any) => String(row.bet_item_id))
+          );
+          const alreadyRefundedItemIds = new Set<string>(
+            (refundsResult.data || [])
+              .filter((row: any) => row.bet_item_id != null)
+              .map((row: any) => String(row.bet_item_id))
+          );
+          eligibleItems = activeItems.filter((item) =>
+            !alreadySettledItemIds.has(String(item.id)) &&
+            !alreadyRefundedItemIds.has(String(item.id))
+          );
+        }
+      }
+    }
+
+    const estimatedRefund = eligibleItems.reduce(
+      (total, item) => total + Number(item.stake || 0),
+      0
+    );
+    const expiredSessionCount = candidateSessions.filter((session: any) =>
+      session.deadline_at && new Date(String(session.deadline_at)).getTime() <= Date.now()
+    ).length;
+    const confirmed = window.confirm(
+      `GAME OFF — FINAL IMPACT CONFIRMATION\n\n` +
+      `Game: ${game?.game_name || "Selected game"}\n` +
+      `Date: ${gameSettingsDate}\n` +
+      `Sessions eligible for Game OFF: ${eligibleSessionIds.length}\n` +
+      `Sessions protected/skipped (declared result or settlement): ${protectedSessionIds.size}\n` +
+      `Eligible active bet items to refund: ${eligibleItems.length}\n` +
+      `Estimated total refund: $${estimatedRefund.toFixed(2)}\n` +
+      (expiredSessionCount > 0
+        ? `\nWARNING: ${expiredSessionCount} eligible session(s) have passed their deadline.\n`
+        : "\n") +
+      `\nThis action changes real session and wallet records. The estimate is read-only and may change before processing; the database rechecks eligibility.\nContinue only if the game, date, and impact above are correct.`
+    );
+    if (!confirmed) return;
+  } catch (error: any) {
+    console.error("=== GAME OFF PREFLIGHT ERROR ===", error);
+    setAdminError(`GAME OFF PRE-CHECK FAILED — No Game OFF action was sent. ${error?.message || String(error)}`);
+    return;
+  }
 
   setGameSettingsLoading(true);
   try {
