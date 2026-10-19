@@ -906,7 +906,26 @@ const [agentAllCustomerSearch, setAgentAllCustomerSearch] = useState("");
 const [agentAllCustomerPage, setAgentAllCustomerPage] = useState(1);
 const [agentAllCustomerLoading, setAgentAllCustomerLoading] = useState(false);
 
-const [adminModule, setAdminModule] = useState<"HOME" | "ACCOUNT_OVERVIEW" | "ACCOUNT_DIRECTORY" | "AGENT_ADMIN" | "AGENT_WALLET" | "DEPOSIT_AGENT" | "WITHDRAW_AGENT" | "ONLINE_CUSTOMER" | "RESULTS" | "SETTLEMENT" | "BET_ANALYZER" | "REPORTS" | "AUDIT" | "CONTACT" | "PASSWORD_RESET" | "CORRECTION_CENTER">("HOME");
+const [adminModule, setAdminModule] = useState<"HOME" | "ACCOUNT_OVERVIEW" | "ACCOUNT_DIRECTORY" | "AGENT_ADMIN" | "AGENT_WALLET" | "DEPOSIT_AGENT" | "WITHDRAW_AGENT" | "ONLINE_CUSTOMER" | "RESULTS" | "SETTLEMENT" | "BET_ANALYZER" | "REPORTS" | "AUDIT" | "CONTACT" | "PASSWORD_RESET" | "CORRECTION_CENTER" | "GAME_SETTINGS">("HOME");
+const [gameSettingsGames, setGameSettingsGames] = useState<Array<{ id: string; game_code: string; game_name: string }>>([]);
+const [gameSettingsGameId, setGameSettingsGameId] = useState("");
+const [gameSettingsDate, setGameSettingsDate] = useState("");
+const [gameSettingsReason, setGameSettingsReason] = useState("");
+const [gameSettingsSessions, setGameSettingsSessions] = useState<Array<{
+  id: string;
+  session_date: string;
+  bazi_no: number | null;
+  market: string;
+  status: string;
+  market_status: string;
+  opening_time: string | null;
+  deadline_at: string;
+  game_off_at: string | null;
+  game_off_reason: string | null;
+  scheduled_playable: boolean | null;
+}>>([]);
+const [gameSettingsLoading, setGameSettingsLoading] = useState(false);
+const [gameSettingsActionSessionId, setGameSettingsActionSessionId] = useState("");
 const [contactWhatsappLink, setContactWhatsappLink] = useState("");
 const [contactTelegramLink, setContactTelegramLink] = useState("");
 const [contactLoading, setContactLoading] = useState(false);
@@ -1199,6 +1218,143 @@ const loadResultsModule = async () => {
     setAdminError(`RESULTS LOAD ERROR — ${error?.message || String(error)}`);
   } finally {
     setAdminLoading(false);
+  }
+};
+
+const loadGameSettingsModule = async (selectedDate?: string, selectedGameId?: string) => {
+  setGameSettingsLoading(true);
+  setAdminError("");
+  setAdminSuccess("");
+  try {
+    const dateToLoad = selectedDate || gameSettingsDate || getLocalDateString();
+    const gamesResult = await supabase
+      .from("games")
+      .select("id, game_code, game_name")
+      .eq("status", "ACTIVE")
+      .order("game_code", { ascending: true });
+    if (gamesResult.error) throw gamesResult.error;
+
+    const games = (gamesResult.data || []).map((game: any) => ({
+      id: String(game.id),
+      game_code: String(game.game_code || ""),
+      game_name: String(game.game_name || game.game_code || "Game"),
+    }));
+    setGameSettingsGames(games);
+
+    // An explicitly supplied empty game id means use the first active game,
+    // which is important when opening this module from the dashboard.
+    const requestedGameId = selectedGameId !== undefined ? selectedGameId : gameSettingsGameId;
+    const resolvedGameId = requestedGameId || games[0]?.id || "";
+    setGameSettingsGameId(resolvedGameId);
+    setGameSettingsDate(dateToLoad);
+
+    if (!resolvedGameId) {
+      setGameSettingsSessions([]);
+      return;
+    }
+
+    const sessionsResult = await supabase
+      .from("game_sessions")
+      .select("id, session_date, bazi_no, market, status, market_status, opening_time, deadline_at, game_off_at, game_off_reason, scheduled_playable")
+      .eq("game_id", resolvedGameId)
+      .eq("session_date", dateToLoad)
+      .order("bazi_no", { ascending: true, nullsFirst: true })
+      .order("market", { ascending: true });
+    if (sessionsResult.error) throw sessionsResult.error;
+
+    setGameSettingsSessions((sessionsResult.data || []).map((session: any) => ({
+      id: String(session.id),
+      session_date: String(session.session_date || ""),
+      bazi_no: session.bazi_no == null ? null : Number(session.bazi_no),
+      market: String(session.market || ""),
+      status: String(session.status || ""),
+      market_status: String(session.market_status || ""),
+      opening_time: session.opening_time ? String(session.opening_time) : null,
+      deadline_at: String(session.deadline_at || ""),
+      game_off_at: session.game_off_at ? String(session.game_off_at) : null,
+      game_off_reason: session.game_off_reason ? String(session.game_off_reason) : null,
+      scheduled_playable: session.scheduled_playable == null ? null : Boolean(session.scheduled_playable),
+    })));
+  } catch (error: any) {
+    console.error("=== GAME SETTINGS LOAD ERROR ===", error);
+    setAdminError(`GAME SETTINGS LOAD ERROR — ${error?.message || String(error)}`);
+  } finally {
+    setGameSettingsLoading(false);
+  }
+};
+
+const runGameOffForSelectedDate = async () => {
+  setAdminError("");
+  setAdminSuccess("");
+  if (!gameSettingsGameId) {
+    setAdminError("Select a game first.");
+    return;
+  }
+  if (!gameSettingsDate) {
+    setAdminError("Select a date first.");
+    return;
+  }
+  if (!gameSettingsReason.trim()) {
+    setAdminError("Enter a reason for Game OFF.");
+    return;
+  }
+  const game = gameSettingsGames.find((item) => item.id === gameSettingsGameId);
+  const confirmed = window.confirm(
+    `GAME OFF CONFIRMATION\n\nGame: ${game?.game_name || "Selected game"}\nDate: ${gameSettingsDate}\nSessions listed: ${gameSettingsSessions.length}\n\nEligible unsettled sessions may be switched OFF and eligible active stakes refunded. Sessions with a declared result or settlement are skipped. Continue?`
+  );
+  if (!confirmed) return;
+
+  setGameSettingsLoading(true);
+  try {
+    const { data, error } = await supabase.rpc("super_admin_game_off_date", {
+      p_game_id: gameSettingsGameId,
+      p_session_date: gameSettingsDate,
+      p_reason: gameSettingsReason.trim(),
+    });
+    if (error) throw error;
+    const result: any = data || {};
+    setAdminSuccess(
+      `GAME OFF COMPLETE — Sessions OFF: ${Number(result.sessions_off || 0)} • Skipped: ${Number(result.sessions_skipped || 0)} • Refund items: ${Number(result.refund_count || 0)} • Refund amount: $${Number(result.refund_amount || 0).toFixed(2)}`
+    );
+    await loadGameSettingsModule(gameSettingsDate, gameSettingsGameId);
+  } catch (error: any) {
+    console.error("=== GAME OFF ACTION ERROR ===", error);
+    setAdminError(`GAME OFF FAILED — ${error?.message || String(error)}`);
+  } finally {
+    setGameSettingsLoading(false);
+  }
+};
+
+const runGameOnForSession = async (session: { id: string; bazi_no: number | null; market: string; status: string }) => {
+  setAdminError("");
+  setAdminSuccess("");
+  if (!gameSettingsReason.trim()) {
+    setAdminError("Enter a reason for Game ON in the reason field.");
+    return;
+  }
+  const label = session.bazi_no != null ? `Bazi ${session.bazi_no}` : session.market;
+  const confirmed = window.confirm(
+    `GAME ON CONFIRMATION\n\nSession: ${label}\nDate: ${gameSettingsDate}\nCurrent status: ${session.status}\n\nThis does not reverse previous refunds. Continue?`
+  );
+  if (!confirmed) return;
+
+  setGameSettingsLoading(true);
+  setGameSettingsActionSessionId(session.id);
+  try {
+    const { data, error } = await supabase.rpc("super_admin_game_on_session", {
+      p_session_id: session.id,
+      p_reason: gameSettingsReason.trim(),
+    });
+    if (error) throw error;
+    const result: any = data || {};
+    setAdminSuccess(`GAME ON COMPLETE — Session status: ${String(result.new_status || "UPDATED")} • Session: ${label}. Previous refunds remain unchanged.`);
+    await loadGameSettingsModule(gameSettingsDate, gameSettingsGameId);
+  } catch (error: any) {
+    console.error("=== GAME ON ACTION ERROR ===", error);
+    setAdminError(`GAME ON FAILED — ${error?.message || String(error)}`);
+  } finally {
+    setGameSettingsLoading(false);
+    setGameSettingsActionSessionId("");
   }
 };
 
@@ -8436,7 +8592,7 @@ const renderSuperAdminArea = () => (
 <section className="admin-welcome-card">
 <div>
 <div className="admin-section-kicker">CONTROL CENTER</div>
-<h1>{adminModule === "AGENT_ADMIN" ? "Agent Admin" : adminModule === "ACCOUNT_OVERVIEW" ? "Account Overview" : adminModule === "ACCOUNT_DIRECTORY" ? "Customer & Admin All Accounts" : adminModule === "AGENT_WALLET" && agentWalletAction === "DEPOSIT" ? "Deposit Virtual USD" : adminModule === "AGENT_WALLET" && agentWalletAction === "WITHDRAW" ? "Withdraw Virtual USD" : adminModule === "AGENT_WALLET" ? "Agent Wallet" : adminModule === "DEPOSIT_AGENT" ? "Deposit Virtual USD" : adminModule === "WITHDRAW_AGENT" ? "Withdraw Virtual USD" : adminModule === "ONLINE_CUSTOMER" ? "Online Customer Wallet" : adminModule === "RESULTS" ? "Results" : adminModule === "SETTLEMENT" ? "Settlement" : adminModule === "BET_ANALYZER" ? "Bet Analyzer" : adminModule === "CONTACT" ? "Contact" : adminModule === "PASSWORD_RESET" ? "Password Reset" : adminModule === "CORRECTION_CENTER" ? (correctionWorkflow === "UNSETTLED" ? "Unsettled Session Correction" : correctionWorkflow === "SETTLED" ? "Settled Session Correction" : "Result & Settlement Correction") : "Super Admin Dashboard"}</h1>
+<h1>{adminModule === "AGENT_ADMIN" ? "Agent Admin" : adminModule === "ACCOUNT_OVERVIEW" ? "Account Overview" : adminModule === "ACCOUNT_DIRECTORY" ? "Customer & Admin All Accounts" : adminModule === "AGENT_WALLET" && agentWalletAction === "DEPOSIT" ? "Deposit Virtual USD" : adminModule === "AGENT_WALLET" && agentWalletAction === "WITHDRAW" ? "Withdraw Virtual USD" : adminModule === "AGENT_WALLET" ? "Agent Wallet" : adminModule === "DEPOSIT_AGENT" ? "Deposit Virtual USD" : adminModule === "WITHDRAW_AGENT" ? "Withdraw Virtual USD" : adminModule === "ONLINE_CUSTOMER" ? "Online Customer Wallet" : adminModule === "GAME_SETTINGS" ? "Game Settings — Game OFF / ON" : adminModule === "RESULTS" ? "Results" : adminModule === "SETTLEMENT" ? "Settlement" : adminModule === "BET_ANALYZER" ? "Bet Analyzer" : adminModule === "CONTACT" ? "Contact" : adminModule === "PASSWORD_RESET" ? "Password Reset" : adminModule === "CORRECTION_CENTER" ? (correctionWorkflow === "UNSETTLED" ? "Unsettled Session Correction" : correctionWorkflow === "SETTLED" ? "Settled Session Correction" : "Result & Settlement Correction") : "Super Admin Dashboard"}</h1>
 <p>
 {adminModule === "AGENT_ADMIN"
   ? "Create and manage Agent Admin accounts."
@@ -8450,7 +8606,9 @@ const renderSuperAdminArea = () => (
           ? "Return virtual USD from an Agent Admin wallet to Super Admin supply."
           : adminModule === "ONLINE_CUSTOMER"
             ? "Deposit and withdraw virtual USD with Online Customers only."
-            : adminModule === "RESULTS"
+            : adminModule === "GAME_SETTINGS"
+            ? "Control Game OFF / ON for a selected game and date. Eligible unsettled sessions only; declared results and settlements are protected."
+          : adminModule === "RESULTS"
               ? "Declare official game results for the selected session."
               : adminModule === "SETTLEMENT"
                 ? "Settle result-declared game sessions and release customer exposure."
@@ -8556,6 +8714,7 @@ disabled={adminModule === "HOME" && adminLoading}
 <button className="admin-module-card" onClick={()=>{setAdminModule("ONLINE_CUSTOMER");setAdminError("");setOnlineCoinCustomerId("");setOnlineCoinAmount("");}}><b>Online Customer Wallet</b><small>Deposit / withdraw virtual USD</small></button>
 <button className="admin-module-card" onClick={()=>{setAdminModule("AGENT_ADMIN");setAdminError("");}}><b>Agent Admin</b><small>Create Agent Admin accounts</small></button>
 <button className="admin-module-card" onClick={()=>{setAdminModule("PASSWORD_RESET");setAdminPasswordResetTarget("");setAdminPasswordResetPassword("");setAdminError("");setAdminSuccess("");}}><b>Password Reset</b><small>Agent Admin + Online Customer password reset</small></button>
+<button className="admin-module-card" onClick={()=>{setAdminModule("GAME_SETTINGS");setGameSettingsGameId("");setGameSettingsDate(getLocalDateString());setGameSettingsReason("");setGameSettingsSessions([]);setAdminError("");setAdminSuccess("");void loadGameSettingsModule(getLocalDateString(), "");}}><b>Game Settings — Game OFF / ON</b><small>Turn a selected game's sessions OFF or ON by date</small></button>
 <button className="admin-module-card" onClick={()=>{setAdminModule("RESULTS");setResultGameId("");setResultDate("");setResultSessionId("");setResultSingleDigit("");setResultPatti("");setResultCurrent(null);setAdminError("");setAdminSuccess("");void loadResultsModule();}}><b>Results</b><small>Declare game results</small></button>
 <button className="admin-module-card" onClick={()=>{setAdminModule("CORRECTION_CENTER");setCorrectionWorkflow("HOME");setCorrectionSessions([]);setCorrectionSelectedSessionId("");setCorrectionPreview(null);setAdminError("");setAdminSuccess("");}}><b>Result &amp; Settlement Correction</b><small>Choose Unsettled or Settled Session Correction</small></button>
 {[["Settlement","Settle market / Bazi"],["Bet Analyzer","Single / Patti / Jodi analysis"],["Reports","Betting activity reports"],["Audit","Traceable activity history"]].map(([title,sub])=><button key={title} className="admin-module-card" onClick={()=>{if(title==="Settlement"){setAdminModule("SETTLEMENT");setAdminError("");setAdminSuccess("");void loadSettlementModule();}else if(title==="Bet Analyzer"){setAdminModule("BET_ANALYZER");setBetAnalyzerView("ANALYZER");setBetAnalyzerRows([]);setBetAnalyzerOpenPanel("SINGLE");setBetAnalyzerDate(getLocalDateString());setBetAnalyzerGameId("");setBetAnalyzerBaziValue("");setBetAnalyzerSelectedSessionId("");setBetAnalyzerSelectedSession(null);setBetAnalyzerHadLiveData(false);setAdminError("");setAdminSuccess("");}else if(title==="Reports"){setAdminModule("REPORTS");setReportsRows([]);setReportsPage(0);setReportsTotal(0);setAdminError("");setAdminSuccess("");void loadSuperAdminReports(0);}else if(title==="Audit"){setAdminModule("AUDIT");setAuditView("HOME");setAuditTransactionRows([]);setAuditSettlementRows([]);setAuditTransactionPage(0);setAuditSettlementPage(0);setAuditTransactionHasNext(false);setAuditSettlementHasNext(false);setAdminError("");setAdminSuccess("");}else setAdminError(`${title} module is the next build step.`);}}><b>{title}</b><small>{sub}</small></button>)}
@@ -8627,8 +8786,74 @@ Target supply: <b>1,000,000 virtual USD coins</b>. Use the Agent Wallet and Onli
   </div>
 </section>
 </>
- ) : adminModule === "RESULTS" ? (
+ ) : adminModule === "GAME_SETTINGS" ? (
+<section className="admin-panel-card">
+  <div className="admin-panel-title-row">
+    <div>
+      <div className="admin-section-kicker">SUPER ADMIN CONTROL</div>
+      <div className="admin-panel-title">GAME SETTINGS — GAME OFF / ON</div>
+    </div>
+    <button className="admin-small-action" type="button" onClick={() => void loadGameSettingsModule(gameSettingsDate, gameSettingsGameId)} disabled={gameSettingsLoading}>REFRESH</button>
+  </div>
+  <p className="admin-account-detail-intro">
+    Select a game and date. Game OFF applies to eligible sessions for that whole game/date. Sessions with a current declared result or any settlement are skipped by the backend. Game ON is available per OFF session. Previous refunds are never reversed.
+  </p>
+  <div className="admin-form">
+    <div className="admin-form-field">
+      <label>GAME</label>
+      <select className="admin-form-input" value={gameSettingsGameId} onChange={(e) => { setGameSettingsGameId(e.target.value); setGameSettingsSessions([]); setAdminError(""); setAdminSuccess(""); void loadGameSettingsModule(gameSettingsDate, e.target.value); }} disabled={gameSettingsLoading}>
+        <option value="">Select Game</option>
+        {gameSettingsGames.map((game) => <option key={game.id} value={game.id}>{game.game_name} ({game.game_code})</option>)}
+      </select>
+    </div>
+    <div className="admin-form-field">
+      <label>SESSION DATE</label>
+      <input className="admin-form-input" type="date" value={gameSettingsDate} onChange={(e) => { setGameSettingsDate(e.target.value); setAdminError(""); setAdminSuccess(""); void loadGameSettingsModule(e.target.value, gameSettingsGameId); }} disabled={gameSettingsLoading} />
+    </div>
+    <div className="admin-form-field">
+      <label>REASON FOR OFF / ON</label>
+      <textarea className="admin-form-input" value={gameSettingsReason} onChange={(e) => setGameSettingsReason(e.target.value)} maxLength={1000} placeholder="Enter the reason for this Game OFF / ON action" disabled={gameSettingsLoading} style={{ minHeight: "84px", height: "auto", padding: "10px", resize: "vertical" }} />
+    </div>
+    <div className="admin-form-note">
+      SAFETY: Game OFF can refund eligible ACTIVE bet items and release their exposure. Review the selected game/date carefully before confirming. Result-declared and settled sessions are not changed. Game ON does not restore refunded bets and will not reopen an expired session.
+    </div>
+    <button className="admin-create-btn" type="button" onClick={() => void runGameOffForSelectedDate()} disabled={gameSettingsLoading || !gameSettingsGameId || !gameSettingsDate || !gameSettingsReason.trim()}>
+      {gameSettingsLoading ? "PROCESSING..." : "GAME OFF — SELECTED GAME / DATE"}
+    </button>
+  </div>
+  <div className="admin-panel-title" style={{ marginTop: "18px" }}>SESSIONS FOR SELECTED GAME / DATE</div>
+  {gameSettingsLoading ? <div className="admin-empty">LOADING GAME SESSIONS...</div> : !gameSettingsGameId ? <div className="admin-empty">Select a game to load its sessions.</div> : gameSettingsSessions.length === 0 ? <div className="admin-empty">No sessions found for this game and date.</div> : (
+    <div className="admin-agent-list">
+      {gameSettingsSessions.map((session) => {
+        const sessionLabel = session.bazi_no != null ? `Bazi ${session.bazi_no}` : session.market;
+        const isGameOff = session.status === "GAME_OFF";
+        const protectedStatus = ["RESULT_DECLARED", "SETTLEMENT_PENDING", "SETTLED", "LOCKED"].includes(session.status);
+        return (
+          <div className="admin-agent-row" key={session.id} style={{ alignItems: "flex-start", flexWrap: "wrap" }}>
+            <div style={{ flex: 1, minWidth: "190px" }}>
+              <b>{sessionLabel} • {session.market}</b>
+              <small>DATE: {session.session_date} • STATUS: {session.status} • PLAYABLE: {session.scheduled_playable === true ? "YES" : session.scheduled_playable === false ? "NO" : "UNKNOWN"}</small>
+              <small>DEADLINE: {session.deadline_at ? new Date(session.deadline_at).toLocaleString("en-IN") : "-"}</small>
+              {session.game_off_at ? <small>GAME OFF AT: {new Date(session.game_off_at).toLocaleString("en-IN")}</small> : null}
+              {session.game_off_reason ? <small>REASON: {session.game_off_reason}</small> : null}
+              {protectedStatus ? <small>PROTECTED STATUS — Game OFF backend will skip this session.</small> : null}
+            </div>
+            {isGameOff ? (
+              <button className="admin-small-action" type="button" onClick={() => void runGameOnForSession(session)} disabled={gameSettingsLoading || gameSettingsActionSessionId === session.id || !gameSettingsReason.trim()}>
+                {gameSettingsActionSessionId === session.id ? "PROCESSING..." : "GAME ON"}
+              </button>
+            ) : (
+              <span className={`admin-status ${session.status === "OPEN" ? "active" : ""}`} style={{ alignSelf: "center" }}>{session.status}</span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  )}
+</section>
+) : adminModule === "RESULTS" ? (
 <>
+
 <section className="admin-panel-card">
   <div className="admin-panel-title">DECLARE GAME RESULT</div>
   <p className="admin-account-detail-intro">
