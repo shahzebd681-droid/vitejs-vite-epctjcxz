@@ -18190,6 +18190,131 @@ color: #111;
   .public-game-selector > small,.customer-game-selector > small{font-size:8px;}
 }
 
+/* V9 TARGETED FIX: reserve a true center column for the emblem and keep
+   game name/date/session details entirely in the left column. */
+.public-game-selector,
+.customer-game-selector{
+  display:grid !important;
+  grid-template-columns:minmax(0,1fr) 58px minmax(0,max-content) !important;
+  grid-template-rows:auto auto auto !important;
+  align-items:center !important;
+  column-gap:7px !important;
+  row-gap:2px !important;
+  min-height:88px !important;
+  padding:7px 9px !important;
+  box-sizing:border-box !important;
+}
+.public-game-selector-icon.premium-emblem,
+.customer-game-selector-icon.premium-emblem{
+  grid-column:2 !important;
+  grid-row:1 / span 3 !important;
+  justify-self:center !important;
+  align-self:center !important;
+  width:56px !important;
+  height:56px !important;
+  min-width:56px !important;
+  max-width:56px !important;
+  box-sizing:border-box !important;
+  overflow:visible !important;
+  margin:0 !important;
+  flex:none !important;
+}
+.public-game-selector > strong,
+.customer-game-selector > strong{
+  grid-column:1 !important;
+  grid-row:1 !important;
+  align-self:end !important;
+  justify-self:start !important;
+  min-width:0 !important;
+  width:100% !important;
+  overflow:hidden !important;
+  text-overflow:ellipsis !important;
+  white-space:nowrap !important;
+  font-size:clamp(12px,3.6vw,15px) !important;
+  line-height:1.15 !important;
+}
+.public-game-selector > span:not(.public-game-selector-top):not(.premium-emblem),
+.customer-game-selector > span:not(.customer-game-selector-top):not(.premium-emblem){
+  grid-column:1 !important;
+  grid-row:2 !important;
+  justify-self:start !important;
+  align-self:center !important;
+  min-width:0 !important;
+  width:100% !important;
+  overflow:hidden !important;
+  text-overflow:ellipsis !important;
+  white-space:nowrap !important;
+  font-size:clamp(9px,2.7vw,12px) !important;
+  line-height:1.15 !important;
+}
+.public-game-selector > small,
+.customer-game-selector > small{
+  grid-column:1 !important;
+  grid-row:3 !important;
+  align-self:start !important;
+  justify-self:start !important;
+  min-width:0 !important;
+  width:100% !important;
+  overflow:hidden !important;
+  text-overflow:ellipsis !important;
+  white-space:nowrap !important;
+  font-size:clamp(8px,2.5vw,11px) !important;
+  line-height:1.15 !important;
+}
+.public-game-selector-top,
+.customer-game-selector-top{
+  grid-column:3 !important;
+  grid-row:1 / span 3 !important;
+  align-self:center !important;
+  justify-self:end !important;
+  min-width:0 !important;
+  max-width:100% !important;
+}
+.public-game-selector-top .public-game-selector-status,
+.customer-game-selector-top .customer-game-selector-status{
+  font-size:clamp(7px,2.2vw,9px) !important;
+  padding:4px 5px !important;
+  white-space:nowrap !important;
+}
+.game-emblem-crown{
+  font-size:14px !important;
+  line-height:.9 !important;
+  margin-top:-3px !important;
+}
+.game-emblem-mark{
+  font-size:clamp(17px,4.8vw,23px) !important;
+  line-height:1 !important;
+  margin-top:2px !important;
+  letter-spacing:-.5px !important;
+}
+@media(max-width:390px){
+  .public-game-selector,
+  .customer-game-selector{
+    grid-template-columns:minmax(0,1fr) 54px minmax(0,max-content) !important;
+    min-height:82px !important;
+    padding:6px 7px !important;
+    column-gap:5px !important;
+    row-gap:2px !important;
+  }
+  .public-game-selector-icon.premium-emblem,
+  .customer-game-selector-icon.premium-emblem{
+    width:52px !important;
+    height:52px !important;
+    min-width:52px !important;
+    max-width:52px !important;
+  }
+  .game-emblem-crown{font-size:12px !important;}
+  .game-emblem-mark{font-size:18px !important;}
+  .public-game-selector > strong,
+  .customer-game-selector > strong{font-size:clamp(11px,3.4vw,13px) !important;}
+  .public-game-selector-top .public-game-selector-status,
+  .customer-game-selector-top .customer-game-selector-status{
+    font-size:7px !important;
+    padding:4px 4px !important;
+  }
+}
+
+
 
 `}
 
