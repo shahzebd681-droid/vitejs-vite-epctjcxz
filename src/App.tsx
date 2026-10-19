@@ -2056,6 +2056,9 @@ type TodayPlayableSession = {
   market: string;
   opening_time: string;
   deadline_at: string;
+  status: string;
+  game_off_at: string | null;
+  game_off_reason: string | null;
 };
 
 const [todayPlayableSessions, setTodayPlayableSessions] = useState<TodayPlayableSession[]>([]);
@@ -2238,10 +2241,10 @@ const loadTodayPlayableSessions = async (sessionDate = getLocalDateString()) => 
   try {
     // Guest users cannot SELECT game_sessions directly because the existing
     // RLS policy is authenticated-only. Use the dedicated public RPC instead.
-    // The RPC returns only today's scheduled-playable sessions and the game
-    // name, so the guest Home uses the same source of truth as the logged-in Home.
+    // The public RPC returns today's scheduled-playable sessions, including the
+    // database status and Game OFF fields used by both guest and logged-in Home.
     const { data: sessions, error: sessionError } = await supabase.rpc(
-      "get_public_today_playable_sessions"
+      "get_public_today_playable_sessions_v2"
     );
 
     if (sessionError) throw sessionError;
@@ -2274,6 +2277,9 @@ const loadTodayPlayableSessions = async (sessionDate = getLocalDateString()) => 
           market: String(session.market || ""),
           opening_time: String(session.opening_time || ""),
           deadline_at: String(session.deadline_at || ""),
+          status: String(session.status || "").trim().toUpperCase(),
+          game_off_at: session.game_off_at == null ? null : String(session.game_off_at),
+          game_off_reason: session.game_off_reason == null ? null : String(session.game_off_reason),
         };
       })
       .filter((session): session is TodayPlayableSession => Boolean(session));
@@ -2731,9 +2737,13 @@ const getSessionStatus = (
     return item.bazi_no === bazi;
   });
 
-  if (!session || !session.opening_time || !session.deadline_at) {
-    return "LOCKED";
-  }
+  if (!session) return "GAME OFF";
+
+  // The database status is authoritative: a Game OFF session must never be
+  // presented as open/locked merely because its deadline is still in future.
+  if (session.status === "GAME_OFF" || session.game_off_at) return "GAME OFF";
+
+  if (!session.opening_time || !session.deadline_at) return "LOCKED";
 
   const nowMs = Date.now();
   const deadlineMs = new Date(session.deadline_at).getTime();
@@ -2742,10 +2752,6 @@ const getSessionStatus = (
     ? "RUNNING"
     : "LOCKED";
 };
-
-
-
-
 
 
 
@@ -3326,11 +3332,14 @@ const getGameSessionStatus = (game: GameName) => {
   if (!todaySessionsReady) return "LOADING";
   const sessions = todayPlayableSessions.filter((session) => session.game === game);
   if (sessions.length === 0) return "GAME OFF";
-  return sessions.some((session) => getSessionStatus(
+  const statuses = sessions.map((session) => getSessionStatus(
     game,
     session.bazi_no,
-    game === "Main Bazar" ? session.market : ""
-  ) === "RUNNING") ? "OPEN FOR BETTING" : "LOCKED";
+    game === "Main Bazar" || game === "PK Main Mumbai" ? session.market : ""
+  ));
+  if (statuses.some((status) => status === "RUNNING")) return "OPEN FOR BETTING";
+  if (statuses.every((status) => status === "GAME OFF")) return "GAME OFF";
+  return "LOCKED";
 };
 
 const getGameSessionCount = (game: GameName) =>
@@ -3398,6 +3407,11 @@ const session = todayPlayableSessions.find((item) => {
 
 if (!session) {
   alert("This game is not available today.");
+  return;
+}
+
+if (session.status === "GAME_OFF" || session.game_off_at) {
+  alert("This game is currently GAME OFF.");
   return;
 }
 
@@ -3986,8 +4000,8 @@ const renderPublicMainMarket = (market: string, deadline: string) => {
   return (
     <div className="public-session-card">
       <div className="public-session-top"><strong>{market}</strong><span>Deadline {deadline}</span></div>
-      <div className={running ? "public-session-status open" : available ? "public-session-status locked" : "public-session-status off"}>
-        {running ? <><span className="green-dot" /> OPEN FOR BETTING</> : available ? "LOCKED" : "GAME OFF"}
+      <div className={running ? "public-session-status open" : getSessionStatus("Main Bazar", null, market) === "GAME OFF" ? "public-session-status off" : available ? "public-session-status locked" : "public-session-status off"}>
+        {running ? <><span className="green-dot" /> OPEN FOR BETTING</> : getSessionStatus("Main Bazar", null, market) === "GAME OFF" ? "GAME OFF" : available ? "LOCKED" : "GAME OFF"}
       </div>
       <div className="result-line">Result: <span className="result-value">{formatTodayResult(getTodayGameResult("Main Bazar", null, market))}</span></div>
       {running ? <button className="play-btn" onClick={openLogin}>LOGIN TO PLAY</button> : null}
@@ -4002,8 +4016,8 @@ const renderPublicMarketForGame = (game: "Main Bazar" | "PK Main Mumbai", market
   return (
     <div className="public-session-card">
       <div className="public-session-top"><strong>{market}</strong><span>Deadline {deadline}</span></div>
-      <div className={running ? "public-session-status open" : available ? "public-session-status locked" : "public-session-status off"}>
-        {running ? <><span className="green-dot" /> OPEN FOR BETTING</> : available ? "LOCKED" : "GAME OFF"}
+      <div className={running ? "public-session-status open" : getSessionStatus(game, null, market) === "GAME OFF" ? "public-session-status off" : available ? "public-session-status locked" : "public-session-status off"}>
+        {running ? <><span className="green-dot" /> OPEN FOR BETTING</> : getSessionStatus(game, null, market) === "GAME OFF" ? "GAME OFF" : available ? "LOCKED" : "GAME OFF"}
       </div>
       <div className="result-line">Result: <span className="result-value">{formatTodayResult(getTodayGameResult(game, null, market))}</span></div>
       {running ? <button className="play-btn" onClick={openLogin}>LOGIN TO PLAY</button> : null}
@@ -4018,7 +4032,7 @@ const renderMainMarketForGame = (game: "Main Bazar" | "PK Main Mumbai", market: 
   return (
     <button className={running ? "customer-market running" : "customer-market locked"} disabled={!running} onClick={() => running && openBetting(game, market, null)}>
       <div className="customer-market-top"><span>{market}</span><span>{time}</span></div>
-      <div className="customer-market-status">{running ? "OPEN FOR BETTING" : available ? "BETTING CLOSED" : "GAME OFF"}</div>
+      <div className={`customer-market-status${!running ? getSessionStatus(game, null, market) === "GAME OFF" || !available ? " off" : " locked-text" : " open"}`}>{running ? "OPEN FOR BETTING" : getSessionStatus(game, null, market) === "GAME OFF" || !available ? "GAME OFF" : "LOCKED"}</div>
       <div className="customer-result-line"><span>RESULT</span><strong>{formatTodayResult(getTodayGameResult(game, null, market))}</strong></div>
       {running ? <div className="customer-play-action">TAP TO PLAY</div> : null}
     </button>
@@ -4031,8 +4045,8 @@ const renderPublicBazi = (game: "Kolkata Fatafat" | "Dus ka Dum", bazi: { no: nu
   return (
     <div className="public-session-card">
       <div className="public-session-top"><strong>Bazi {bazi.no}</strong><span>{bazi.time}</span></div>
-      <div className={running ? "public-session-status open" : available ? "public-session-status locked" : "public-session-status off"}>
-        {running ? <><span className="green-dot" /> OPEN FOR BETTING</> : available ? "LOCKED" : "GAME OFF"}
+      <div className={running ? "public-session-status open" : getSessionStatus(game, bazi.no) === "GAME OFF" ? "public-session-status off" : available ? "public-session-status locked" : "public-session-status off"}>
+        {running ? <><span className="green-dot" /> OPEN FOR BETTING</> : getSessionStatus(game, bazi.no) === "GAME OFF" ? "GAME OFF" : available ? "LOCKED" : "GAME OFF"}
       </div>
       <div className="result-line">Result: <span className="result-value">{formatTodayResult(getTodayGameResult(game, bazi.no))}</span></div>
       {running ? <button className="play-btn" onClick={openLogin}>LOGIN TO PLAY</button> : null}
@@ -11421,6 +11435,15 @@ font-size: 10px;
 
 
 
+.customer-market-status.off,
+.customer-market-status.locked-text{
+  color:#ff6b6b;
+}
+
+.customer-market-status.open{
+  color:#27ed82;
+}
+
 .customer-market.locked {
 
 
@@ -16641,8 +16664,8 @@ color: #111;
 
 .public-game-selector-status.locked,
 .customer-game-selector-status.locked{
-  color:#ffd43d;
-  border-color:rgba(255,212,61,.4);
+  color:#ff6b6b;
+  border-color:rgba(255,91,91,.4);
 }
 
 .public-game-selector-status.off,
@@ -16757,8 +16780,8 @@ color: #111;
 }
 
 .public-session-status.locked{
-  color:#ffd43d;
-  background:rgba(255,212,61,.06);
+  color:#ff7070;
+  background:rgba(255,91,91,.06);
 }
 
 .public-session-status.off{
