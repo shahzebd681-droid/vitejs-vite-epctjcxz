@@ -18316,14 +18316,6 @@ color: #111;
 
 
 
-`}
-
-
-
-
-
-
-
 
 /* V10 TARGETED FIX: emblem on the left, game details next to it, and the
    MB / 8 / 10 / PK mark mathematically centered inside the emblem. */
@@ -18468,6 +18460,17 @@ color: #111;
   .public-game-selector-icon.premium-emblem .game-emblem-mark,
   .customer-game-selector-icon.premium-emblem .game-emblem-mark{font-size:17px !important;}
 }
+
+
+`}
+
+
+
+
+
+
+
+
 
 </style>
 
