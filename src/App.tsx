@@ -1354,30 +1354,21 @@ const runGameOffForSelectedDate = async () => {
         const activeItemIds = activeItems.map((item) => String(item.id));
 
         if (activeItemIds.length > 0) {
-          const [settlementItemsResult, refundsResult] = await Promise.all([
-            supabase
-              .from("settlement_items")
-              .select("bet_item_id")
-              .in("bet_item_id", activeItemIds),
-            supabase
-              .from("refund_transactions")
-              .select("bet_item_id")
-              .in("bet_item_id", activeItemIds),
-          ]);
+          // Do not query refund_transactions directly from the browser:
+          // authenticated clients intentionally have no direct SELECT access.
+          // The backend Game OFF function remains authoritative and skips items
+          // that already have a refund record before issuing any wallet refund.
+          const settlementItemsResult = await supabase
+            .from("settlement_items")
+            .select("bet_item_id")
+            .in("bet_item_id", activeItemIds);
           if (settlementItemsResult.error) throw settlementItemsResult.error;
-          if (refundsResult.error) throw refundsResult.error;
 
           const alreadySettledItemIds = new Set<string>(
             (settlementItemsResult.data || []).map((row: any) => String(row.bet_item_id))
           );
-          const alreadyRefundedItemIds = new Set<string>(
-            (refundsResult.data || [])
-              .filter((row: any) => row.bet_item_id != null)
-              .map((row: any) => String(row.bet_item_id))
-          );
-          eligibleItems = activeItems.filter((item) =>
-            !alreadySettledItemIds.has(String(item.id)) &&
-            !alreadyRefundedItemIds.has(String(item.id))
+          eligibleItems = activeItems.filter(
+            (item) => !alreadySettledItemIds.has(String(item.id))
           );
         }
       }
@@ -1396,12 +1387,12 @@ const runGameOffForSelectedDate = async () => {
       `Date: ${gameSettingsDate}\n` +
       `Sessions eligible for Game OFF: ${eligibleSessionIds.length}\n` +
       `Sessions protected/skipped (declared result or settlement): ${protectedSessionIds.size}\n` +
-      `Eligible active bet items to refund: ${eligibleItems.length}\n` +
+      `Active bet items without settlement (pre-check estimate): ${eligibleItems.length}\n` +
       `Estimated total refund: $${estimatedRefund.toFixed(2)}\n` +
       (expiredSessionCount > 0
         ? `\nWARNING: ${expiredSessionCount} eligible session(s) have passed their deadline.\n`
         : "\n") +
-      `\nThis action changes real session and wallet records. The estimate is read-only and may change before processing; the database rechecks eligibility.\nContinue only if the game, date, and impact above are correct.`
+      `\nThis action changes real session and wallet records. This pre-check cannot read prior refund records directly, so the item count and amount are estimates and may be higher than the final refund. The database rechecks eligibility and skips items already refunded.\nContinue only if the game, date, and impact above are correct.`
     );
     if (!confirmed) return;
   } catch (error: any) {
