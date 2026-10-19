@@ -18071,8 +18071,129 @@ color: #111;
   .customer-welcome-whatsapp-icon svg{width:22px;height:22px;}
 }
 
+/* V8 CONFIRMED FIX: keep game details, centered premium emblem and status in separate grid columns. */
+.public-game-selector,
+.customer-game-selector{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) clamp(82px,24vw,112px) minmax(0,auto);
+  grid-template-rows:auto auto auto;
+  align-items:center;
+  column-gap:8px;
+  row-gap:3px;
+  min-height:104px;
+  padding:9px 10px;
+  overflow:hidden;
+}
+.public-game-selector-icon.premium-emblem,
+.customer-game-selector-icon.premium-emblem{
+  grid-column:2;
+  grid-row:1 / span 3;
+  justify-self:center;
+  align-self:center;
+  width:clamp(76px,22vw,104px);
+  height:clamp(76px,22vw,104px);
+  min-width:0;
+  box-sizing:border-box;
+  overflow:visible;
+  border:2px solid #e7bd59;
+  border-radius:50%;
+  position:relative;
+  isolation:isolate;
+  background:radial-gradient(ellipse at 50% 35%,#704b13 0%,#261806 48%,#08090b 76%);
+  box-shadow:0 0 12px rgba(255,196,65,.42),inset 0 0 0 3px rgba(255,223,135,.3),inset 0 0 0 7px rgba(126,77,13,.48);
+}
+.public-game-selector-icon.premium-emblem::before,
+.customer-game-selector-icon.premium-emblem::before{
+  content:"✦  ✧  ✦";
+  position:absolute;
+  left:0;
+  right:0;
+  bottom:5px;
+  z-index:-1;
+  text-align:center;
+  color:#ffe39a;
+  font-size:clamp(8px,2.4vw,12px);
+  letter-spacing:1px;
+  text-shadow:0 0 6px rgba(255,190,50,.95);
+}
+.public-game-selector-icon.premium-emblem::after,
+.customer-game-selector-icon.premium-emblem::after{
+  content:"";
+  position:absolute;
+  inset:5px;
+  border:1px solid rgba(255,221,130,.68);
+  border-radius:inherit;
+  pointer-events:none;
+  box-shadow:inset 0 0 8px rgba(255,199,64,.22);
+}
+.game-emblem-crown{
+  display:block;
+  position:relative;
+  z-index:1;
+  margin-top:-5px;
+  font-size:clamp(19px,5vw,26px);
+  line-height:.9;
+  color:#ffe8a1;
+  -webkit-text-stroke:.35px #a66a12;
+  text-shadow:0 1px 1px #5b3100,0 0 7px rgba(255,200,67,.85);
+}
+.game-emblem-mark{
+  position:relative;
+  z-index:1;
+  margin-top:3px;
+  font-family:Georgia,"Times New Roman",serif;
+  font-size:clamp(24px,6.5vw,35px);
+  line-height:1;
+  font-weight:900;
+  letter-spacing:-1px;
+  color:#fff0b6;
+  -webkit-text-stroke:.55px #8d4c05;
+  text-shadow:0 2px 0 #7b3d05,0 0 5px rgba(255,218,117,.75),1px 2px 2px #000;
+}
+.premium-emblem.main{
+  border-color:#e9bd51 !important;
+  background:radial-gradient(ellipse at 50% 35%,#a86c14 0%,#4c2709 44%,#100b07 76%) !important;
+  box-shadow:0 0 14px rgba(255,189,50,.6),inset 0 0 0 3px rgba(255,228,147,.42),inset 0 0 0 7px rgba(136,79,11,.62) !important;
+}
+.premium-emblem.kolkata{
+  border-color:#d2a0ff !important;
+  background:radial-gradient(ellipse at 50% 35%,#9b43d8 0%,#45106d 48%,#160622 78%) !important;
+  box-shadow:0 0 15px rgba(173,91,255,.7),inset 0 0 0 3px rgba(239,204,255,.38),inset 0 0 0 7px rgba(119,48,179,.55) !important;
+}
+.premium-emblem.dus{
+  border-radius:25% !important;
+  border-color:#ffd16b !important;
+  background:radial-gradient(ellipse at 50% 35%,#1a78bd 0%,#103f75 48%,#071426 78%) !important;
+  box-shadow:0 0 14px rgba(255,190,56,.58),inset 0 0 0 3px rgba(255,226,151,.42),inset 0 0 0 7px rgba(166,91,14,.55) !important;
+}
+.premium-emblem.pk{
+  border-color:#e8c45e !important;
+  background:radial-gradient(ellipse at 50% 35%,#1c75a8 0%,#103c5b 48%,#061522 78%) !important;
+  box-shadow:0 0 14px rgba(255,193,58,.48),inset 0 0 0 3px rgba(255,230,158,.4),inset 0 0 0 7px rgba(126,84,15,.52) !important;
+}
+.public-game-selector > strong,
+.customer-game-selector > strong{grid-column:1;grid-row:1;align-self:end;min-width:0;}
+.public-game-selector > span:not(.public-game-selector-top),
+.customer-game-selector > span:not(.customer-game-selector-top){grid-column:1;grid-row:2;min-width:0;white-space:nowrap;}
+.public-game-selector > small,
+.customer-game-selector > small{grid-column:1;grid-row:3;min-width:0;}
+.public-game-selector-top,
+.customer-game-selector-top{grid-column:3;grid-row:1 / span 3;align-self:start;justify-self:end;}
+@media(max-width:390px){
+  .public-game-selector,.customer-game-selector{grid-template-columns:minmax(0,1fr) 78px minmax(0,auto);min-height:96px;padding:8px;column-gap:5px;}
+  .public-game-selector-icon.premium-emblem,.customer-game-selector-icon.premium-emblem{width:72px;height:72px;}
+  .game-emblem-crown{font-size:18px;}
+  .game-emblem-mark{font-size:24px;}
+  .public-game-selector-top .public-game-selector-status,.customer-game-selector-top .customer-game-selector-status{font-size:8px;padding:4px 5px;}
+  .public-game-selector > strong,.customer-game-selector > strong{font-size:clamp(12px,3.5vw,15px);}
+  .public-game-selector > span:not(.public-game-selector-top),.customer-game-selector > span:not(.customer-game-selector-top){font-size:9px;}
+  .public-game-selector > small,.customer-game-selector > small{font-size:8px;}
+}
+
 
 `}
+
+
 
 
 
