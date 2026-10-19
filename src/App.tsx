@@ -18323,6 +18323,152 @@ color: #111;
 
 
 
+
+
+/* V10 TARGETED FIX: emblem on the left, game details next to it, and the
+   MB / 8 / 10 / PK mark mathematically centered inside the emblem. */
+.public-game-selector,
+.customer-game-selector{
+  display:grid !important;
+  grid-template-columns:54px minmax(0,1fr) max-content !important;
+  grid-template-rows:auto auto auto !important;
+  align-items:center !important;
+  column-gap:9px !important;
+  row-gap:3px !important;
+  min-height:84px !important;
+  padding:8px 9px !important;
+  box-sizing:border-box !important;
+}
+.public-game-selector-icon.premium-emblem,
+.customer-game-selector-icon.premium-emblem{
+  grid-column:1 !important;
+  grid-row:1 / span 3 !important;
+  justify-self:center !important;
+  align-self:center !important;
+  position:relative !important;
+  display:block !important;
+  width:48px !important;
+  height:48px !important;
+  min-width:48px !important;
+  max-width:48px !important;
+  margin:0 !important;
+  padding:0 !important;
+  box-sizing:border-box !important;
+  overflow:hidden !important;
+  flex:none !important;
+}
+.public-game-selector > strong,
+.customer-game-selector > strong{
+  grid-column:2 !important;
+  grid-row:1 !important;
+  align-self:end !important;
+  justify-self:start !important;
+  min-width:0 !important;
+  width:100% !important;
+  margin:0 !important;
+  overflow:hidden !important;
+  text-overflow:ellipsis !important;
+  white-space:nowrap !important;
+  font-size:clamp(12px,3.6vw,15px) !important;
+  line-height:1.15 !important;
+}
+.public-game-selector > span:not(.public-game-selector-top):not(.premium-emblem),
+.customer-game-selector > span:not(.customer-game-selector-top):not(.premium-emblem){
+  grid-column:2 !important;
+  grid-row:2 !important;
+  justify-self:start !important;
+  align-self:center !important;
+  min-width:0 !important;
+  width:100% !important;
+  overflow:hidden !important;
+  text-overflow:ellipsis !important;
+  white-space:nowrap !important;
+  font-size:clamp(9px,2.7vw,12px) !important;
+  line-height:1.15 !important;
+}
+.public-game-selector > small,
+.customer-game-selector > small{
+  grid-column:2 !important;
+  grid-row:3 !important;
+  align-self:start !important;
+  justify-self:start !important;
+  min-width:0 !important;
+  width:100% !important;
+  overflow:hidden !important;
+  text-overflow:ellipsis !important;
+  white-space:nowrap !important;
+  font-size:clamp(8px,2.5vw,11px) !important;
+  line-height:1.15 !important;
+}
+.public-game-selector-top,
+.customer-game-selector-top{
+  grid-column:3 !important;
+  grid-row:1 / span 3 !important;
+  align-self:center !important;
+  justify-self:end !important;
+  min-width:0 !important;
+  max-width:100% !important;
+}
+.public-game-selector-top .public-game-selector-status,
+.customer-game-selector-top .customer-game-selector-status{
+  font-size:clamp(7px,2.2vw,9px) !important;
+  padding:4px 5px !important;
+  white-space:nowrap !important;
+}
+.public-game-selector-icon.premium-emblem .game-emblem-crown,
+.customer-game-selector-icon.premium-emblem .game-emblem-crown{
+  position:absolute !important;
+  top:1px !important;
+  left:50% !important;
+  transform:translateX(-50%) !important;
+  margin:0 !important;
+  padding:0 !important;
+  font-size:11px !important;
+  line-height:1 !important;
+  z-index:2 !important;
+}
+.public-game-selector-icon.premium-emblem .game-emblem-mark,
+.customer-game-selector-icon.premium-emblem .game-emblem-mark{
+  position:absolute !important;
+  left:50% !important;
+  top:50% !important;
+  transform:translate(-50%,-50%) !important;
+  display:block !important;
+  width:100% !important;
+  margin:0 !important;
+  padding:0 1px !important;
+  box-sizing:border-box !important;
+  text-align:center !important;
+  font-family:Georgia,serif !important;
+  font-size:clamp(15px,4.2vw,20px) !important;
+  line-height:1 !important;
+  font-weight:900 !important;
+  letter-spacing:-.4px !important;
+  white-space:nowrap !important;
+  z-index:3 !important;
+}
+@media(max-width:390px){
+  .public-game-selector,
+  .customer-game-selector{
+    grid-template-columns:48px minmax(0,1fr) max-content !important;
+    min-height:80px !important;
+    padding:7px 7px !important;
+    column-gap:7px !important;
+    row-gap:2px !important;
+  }
+  .public-game-selector-icon.premium-emblem,
+  .customer-game-selector-icon.premium-emblem{
+    width:44px !important;
+    height:44px !important;
+    min-width:44px !important;
+    max-width:44px !important;
+  }
+  .public-game-selector-icon.premium-emblem .game-emblem-crown,
+  .customer-game-selector-icon.premium-emblem .game-emblem-crown{font-size:10px !important;}
+  .public-game-selector-icon.premium-emblem .game-emblem-mark,
+  .customer-game-selector-icon.premium-emblem .game-emblem-mark{font-size:17px !important;}
+}
+
 </style>
 
 
