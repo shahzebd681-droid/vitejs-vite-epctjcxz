@@ -2522,7 +2522,7 @@ const loadCustomerResultHistory = async () => {
     }
 
     const normalizedReal = sessionRows
-      .map((session: any) => {
+      .map((session: any): CustomerResultRow | null => {
         const game = gameMap.get(String(session.game_id || ""));
         if (!game) return null;
         const result = resultMap.get(String(session.id));
@@ -2551,7 +2551,7 @@ const loadCustomerResultHistory = async () => {
     );
 
     const normalizedHistorical = historicalRows
-      .map((row: any) => {
+      .map((row: any): CustomerResultRow | null => {
         const gameId = String(row.game_id || "");
         const game = gameMap.get(gameId) || historicalGameMap.get(gameId);
         if (!game) return null;
