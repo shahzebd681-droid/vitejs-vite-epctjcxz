@@ -3977,12 +3977,11 @@ const renderPublicGameCards = () => (
       return (
         <Fragment key={game}>
           <button type="button" className={`public-game-selector ${isSelected ? "selected" : ""}`} onClick={() => setPublicSelectedGame((current) => (current === game ? null : game))}>
-            <div className="public-game-selector-top">
-              <span className={`public-game-selector-icon ${game === "Main Bazar" ? "main" : game === "Kolkata Fatafat" ? "kolkata" : game === "PK Main Mumbai" ? "main" : "dus"}`}>
-                {game === "Main Bazar" || game === "PK Main Mumbai" ? "♛" : game === "Kolkata Fatafat" ? "♜" : "🎲"}
-              </span>
-              <span className={`public-game-selector-status ${status === "OPEN FOR BETTING" ? "open" : status === "LOCKED" ? "locked" : "off"}`}>{status}</span>
-            </div>
+            <span className={`public-game-selector-icon premium-emblem ${game === "Main Bazar" ? "main" : game === "Kolkata Fatafat" ? "kolkata" : game === "PK Main Mumbai" ? "pk" : "dus"}`} aria-label={`${game} emblem`}>
+                <span className="game-emblem-crown">♛</span>
+                <span className="game-emblem-mark">{game === "Main Bazar" ? "MB" : game === "Kolkata Fatafat" ? "8" : game === "Dus ka Dum" ? "10" : "PK"}</span>
+            </span>
+            <div className="public-game-selector-top"><span className={`public-game-selector-status ${status === "OPEN FOR BETTING" ? "open" : status === "LOCKED" ? "locked" : "off"}`}>{status}</span></div>
             <strong>{game}</strong>
             <span>{new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</span>
             <small>{status === "LOADING" ? "Checking today's sessions..." : status === "GAME OFF" ? "No session scheduled today" : `${count} session${count === 1 ? "" : "s"} • ${getGameScheduleLabel(game)}`}</small>
@@ -4032,7 +4031,7 @@ const renderMainMarketForGame = (game: "Main Bazar" | "PK Main Mumbai", market: 
   return (
     <button className={running ? "customer-market running" : "customer-market locked"} disabled={!running} onClick={() => running && openBetting(game, market, null)}>
       <div className="customer-market-top"><span>{market}</span><span>{time}</span></div>
-      <div className={`customer-market-status${!running ? getSessionStatus(game, null, market) === "GAME OFF" || !available ? " off" : " locked-text" : " open"}`}>{running ? "OPEN FOR BETTING" : getSessionStatus(game, null, market) === "GAME OFF" || !available ? "GAME OFF" : "LOCKED"}</div>
+      <div className={`customer-market-status${!running ? getSessionStatus(game, null, market) === "GAME OFF" || !available ? " off" : " locked-text" : " open"}`}>{running ? <><span className="green-dot" /> OPEN FOR BETTING</> : getSessionStatus(game, null, market) === "GAME OFF" || !available ? "GAME OFF" : "LOCKED"}</div>
       <div className="customer-result-line"><span>RESULT</span><strong>{formatTodayResult(getTodayGameResult(game, null, market))}</strong></div>
       {running ? <div className="customer-play-action">TAP TO PLAY</div> : null}
     </button>
@@ -4447,26 +4446,7 @@ if (running) {
 >
 
 
-<div className="customer-market-top">
-
-
-<span>{market}</span>
-
-
-
-
-
-
-
-</div>
-
-
-     <div className="customer-deadline">
-
-Deadline: {deadline}
-
-
-</div>
+<div className="customer-market-top customer-market-top-time"><span>{market}</span><strong>{deadline}</strong></div>
 
 
 
@@ -4784,12 +4764,11 @@ const renderCustomerGameCards = () => (
       return (
         <Fragment key={game}>
           <button type="button" className={`customer-game-selector ${isSelected ? "selected" : ""}`} onClick={() => selectCustomerGame(game)}>
-            <div className="customer-game-selector-top">
-              <span className={`customer-game-selector-icon ${game === "Main Bazar" ? "main" : game === "Kolkata Fatafat" ? "kolkata" : game === "PK Main Mumbai" ? "main" : "dus"}`}>
-                {game === "Main Bazar" || game === "PK Main Mumbai" ? "♛" : game === "Kolkata Fatafat" ? "♜" : "🎲"}
-              </span>
-              <span className={`customer-game-selector-status ${status === "OPEN FOR BETTING" ? "open" : status === "LOCKED" ? "locked" : "off"}`}>{status}</span>
-            </div>
+            <span className={`customer-game-selector-icon premium-emblem ${game === "Main Bazar" ? "main" : game === "Kolkata Fatafat" ? "kolkata" : game === "PK Main Mumbai" ? "pk" : "dus"}`} aria-label={`${game} emblem`}>
+                <span className="game-emblem-crown">♛</span>
+                <span className="game-emblem-mark">{game === "Main Bazar" ? "MB" : game === "Kolkata Fatafat" ? "8" : game === "Dus ka Dum" ? "10" : "PK"}</span>
+            </span>
+            <div className="customer-game-selector-top"><span className={`customer-game-selector-status ${status === "OPEN FOR BETTING" ? "open" : status === "LOCKED" ? "locked" : "off"}`}>{status}</span></div>
             <strong>{game}</strong>
             <span>{new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</span>
             <small>{status === "LOADING" ? "Checking today's sessions..." : status === "GAME OFF" ? "No session scheduled today" : `${count} session${count === 1 ? "" : "s"} • ${getGameScheduleLabel(game)}`}</small>
@@ -17923,6 +17902,176 @@ color: #111;
   .customer-welcome-whatsapp-icon svg{width:29px;height:29px;}
 }
 
+
+/* CONFIRMED CUSTOMER HOME DESIGN PATCH — scoped to game selectors and support UI */
+.public-game-selector-grid,
+.customer-game-selector-grid{
+  grid-template-columns:1fr;
+  gap:7px;
+}
+.public-game-selector,
+.customer-game-selector{
+  position:relative;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 66px minmax(0,auto);
+  grid-template-rows:auto auto auto;
+  align-items:center;
+  column-gap:9px;
+  row-gap:2px;
+  min-height:82px;
+  padding:8px 10px;
+  text-align:left;
+}
+.public-game-selector-top,
+.customer-game-selector-top{
+  grid-column:3;
+  grid-row:1 / span 3;
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  margin:0;
+}
+.public-game-selector > strong,
+.customer-game-selector > strong{
+  grid-column:1;
+  grid-row:1;
+  align-self:end;
+  font-size:clamp(13px,3.5vw,17px);
+}
+.public-game-selector > span:not(.public-game-selector-top),
+.customer-game-selector > span:not(.customer-game-selector-top){
+  grid-column:1;
+  grid-row:2;
+  font-size:10px;
+}
+.public-game-selector > small,
+.customer-game-selector > small{
+  grid-column:1;
+  grid-row:3;
+  font-size:9px;
+  line-height:1.2;
+}
+.public-game-selector-top .public-game-selector-status,
+.customer-game-selector-top .customer-game-selector-status{
+  font-size:9px;
+  white-space:nowrap;
+}
+.public-game-selector-icon.premium-emblem,
+.customer-game-selector-icon.premium-emblem{
+  grid-column:2;
+  grid-row:1 / span 3;
+  position:relative;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  width:62px;
+  height:62px;
+  min-width:62px;
+  border:2px solid #d5a94e;
+  border-radius:50%;
+  color:#f5d47c;
+  background:radial-gradient(circle at 35% 25%,rgba(255,231,155,.25),rgba(18,14,7,.96) 65%);
+  box-shadow:0 0 9px rgba(231,181,70,.42),inset 0 0 0 3px rgba(225,177,71,.16);
+  overflow:hidden;
+}
+.game-emblem-crown{
+  font-size:15px;
+  line-height:1;
+  color:#ffe4a0;
+  text-shadow:0 1px 3px #000;
+}
+.game-emblem-mark{
+  display:block;
+  font-family:Georgia,serif;
+  font-size:21px;
+  line-height:1.05;
+  font-weight:900;
+  letter-spacing:-.5px;
+  text-shadow:0 1px 3px #000;
+}
+.premium-emblem.kolkata{
+  border-color:#b88bff !important;
+  color:#e5caff !important;
+  background:radial-gradient(circle at 35% 25%,rgba(188,137,255,.35),#20112e 68%) !important;
+  box-shadow:0 0 10px rgba(165,100,255,.4),inset 0 0 0 3px rgba(205,160,255,.18) !important;
+}
+.premium-emblem.dus{
+  border-radius:20px !important;
+  border-color:#d99c38 !important;
+  color:#ffe5a2 !important;
+  background:radial-gradient(circle at 35% 25%,rgba(255,206,96,.3),#32180c 68%) !important;
+}
+.premium-emblem.pk{
+  border-color:#6e9dff !important;
+  color:#d5e5ff !important;
+  background:radial-gradient(circle at 35% 25%,rgba(100,155,255,.35),#101b39 68%) !important;
+  box-shadow:0 0 10px rgba(70,130,255,.42),inset 0 0 0 3px rgba(140,180,255,.18) !important;
+}
+.customer-market-top-time{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+}
+.customer-market-top-time strong{
+  margin-left:auto;
+  color:#f4d17a;
+  font-size:clamp(16px,4vw,22px);
+  font-weight:900;
+  line-height:1;
+  white-space:nowrap;
+}
+.customer-market-status.open{
+  display:flex;
+  align-items:center;
+  gap:5px;
+}
+.customer-market-status .green-dot{
+  display:inline-block;
+  flex:0 0 7px;
+  width:7px;
+  height:7px;
+  border-radius:50%;
+  background:#24ed80;
+  box-shadow:0 0 6px rgba(36,237,128,.65);
+}
+.customer-welcome.customer-welcome-support{
+  min-height:70px;
+  padding:10px 13px;
+  gap:8px;
+}
+.customer-welcome-divider{min-height:48px;}
+.customer-welcome-whatsapp{flex-basis:29%;gap:4px;}
+.customer-welcome-whatsapp-icon{width:42px;height:42px;}
+.customer-welcome-whatsapp-icon svg{width:25px;height:25px;}
+.customer-welcome-contact-text{font-size:clamp(9px,2.5vw,13px);}
+.support-btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  border-radius:12px;
+  padding:8px 14px;
+  font-weight:800;
+}
+.support-btn[aria-disabled="true"]{opacity:.65;}
+.support-btn-icon{display:inline-flex;align-items:center;justify-content:center;width:29px;height:29px;flex:0 0 29px;border-radius:50%;}
+.support-btn-icon svg{display:block;width:22px;height:22px;}
+.whatsapp-brand-icon{color:#1bf078;border:1px solid rgba(27,240,120,.75);box-shadow:0 0 9px rgba(27,240,120,.25);}
+.telegram-brand-icon{color:#58baff;border:1px solid rgba(88,186,255,.75);box-shadow:0 0 9px rgba(88,186,255,.25);}
+@media(max-width:390px){
+  .public-game-selector,.customer-game-selector{grid-template-columns:minmax(0,1fr) 54px minmax(0,auto);min-height:72px;padding:7px 8px;column-gap:6px;}
+  .public-game-selector-icon.premium-emblem,.customer-game-selector-icon.premium-emblem{width:50px;height:50px;min-width:50px;}
+  .game-emblem-crown{font-size:12px;}
+  .game-emblem-mark{font-size:17px;}
+  .public-game-selector-top .public-game-selector-status,.customer-game-selector-top .customer-game-selector-status{font-size:8px;padding:4px 5px;}
+  .customer-welcome.customer-welcome-support .customer-welcome-title{font-size:clamp(14px,4vw,18px);white-space:normal;}
+  .customer-welcome-whatsapp-icon{width:36px;height:36px;}
+  .customer-welcome-whatsapp-icon svg{width:22px;height:22px;}
+}
+
+
 `}
 
 
@@ -18046,9 +18195,7 @@ target={contactWhatsappLink ? "_blank" : undefined}
 rel={contactWhatsappLink ? "noopener noreferrer" : undefined}
 aria-disabled={!contactWhatsappLink}
 onClick={(e) => { if (!contactWhatsappLink) e.preventDefault(); }}
->
-WhatsApp
-</a>
+><span className="support-btn-icon whatsapp-brand-icon" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M16 3.2A12.2 12.2 0 0 0 5.5 21.6L4 28l6.6-1.7A12.2 12.2 0 1 0 16 3.2Z" fill="none" stroke="currentColor" strokeWidth="2.2"/><path d="M11 9.5c-.5-.7-1-.6-1.4-.6h-.8c-.4 0-.9.2-1.2.7-.4.5-1.4 1.6-1.4 3.7s1.5 4.3 1.8 4.6c.2.3 3.2 5 7.8 6.8 3.8 1.5 4.6 1.2 5.4 1.1.8-.1 2.7-1.1 3.1-2.1.4-1 .4-1.9.3-2.1-.1-.2-.4-.3-.9-.6l-3.2-1.5c-.4-.2-.7-.3-1 .3-.3.5-1.1 1.5-1.4 1.8-.3.3-.6.4-1 .1-.5-.2-2-.8-3.8-2.4-1.4-1.3-2.3-2.7-2.6-3.2-.3-.5 0-.8.2-1 .2-.2.5-.5.7-.8.2-.2.3-.5.5-.8.1-.3.1-.6 0-.9-.1-.3-1-2.5-1.5-3.4Z" fill="currentColor" transform="translate(4 2) scale(.78)"/></svg></span><span>WhatsApp</span></a>
 
 
 
@@ -18060,9 +18207,7 @@ target={contactTelegramLink ? "_blank" : undefined}
 rel={contactTelegramLink ? "noopener noreferrer" : undefined}
 aria-disabled={!contactTelegramLink}
 onClick={(e) => { if (!contactTelegramLink) e.preventDefault(); }}
->
-Telegram
-</a>
+><span className="support-btn-icon telegram-brand-icon" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M29 5.2 24.6 27c-.3 1.5-1.2 1.9-2.5 1.2l-7-5.2-3.4 3.3c-.4.4-.7.7-1.4.7l.5-7.1L23.7 9.2c.5-.5-.1-.8-.8-.3L7.4 18.7.6 16.6c-1.5-.5-1.5-1.5.3-2.2L27.4 4.2c1.2-.4 2.3.3 1.6 1Z" fill="currentColor"/></svg></span><span>Telegram</span></a>
 
 
 </div>
