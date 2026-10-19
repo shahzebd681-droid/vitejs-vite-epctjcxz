@@ -2082,6 +2082,8 @@ type CustomerResultRow = {
   market: string;
   single_digit: string;
   patti: string;
+  status?: string;
+  game_off_at?: string | null;
 };
 
 const [customerResultRows, setCustomerResultRows] = useState<CustomerResultRow[]>([]);
@@ -2443,7 +2445,7 @@ const loadCustomerResultHistory = async () => {
 
     const { data: sessions, error: sessionsError } = await supabase
       .from("game_sessions")
-      .select("id, game_id, session_date, bazi_no, market")
+      .select("id, game_id, session_date, bazi_no, market, status, game_off_at")
       .gte("session_date", historyStartKey)
       .lte("session_date", todayDateKey)
       .eq("scheduled_playable", true)
@@ -2524,7 +2526,9 @@ const loadCustomerResultHistory = async () => {
         const game = gameMap.get(String(session.game_id || ""));
         if (!game) return null;
         const result = resultMap.get(String(session.id));
-        if (!result?.single_digit && !result?.patti) return null;
+        const sessionStatus = String(session.status || "").trim().toUpperCase();
+        const isGameOff = sessionStatus === "GAME_OFF" || Boolean(session.game_off_at);
+        if (!isGameOff && !result?.single_digit && !result?.patti) return null;
         return {
           session_id: String(session.id),
           game_id: String(session.game_id),
@@ -2534,6 +2538,8 @@ const loadCustomerResultHistory = async () => {
           market: String(session.market || "").trim().toUpperCase(),
           single_digit: result?.single_digit == null ? "" : String(result.single_digit),
           patti: result?.patti ? String(result.patti) : "",
+          status: isGameOff ? "GAME_OFF" : sessionStatus,
+          game_off_at: session.game_off_at == null ? null : String(session.game_off_at),
         };
       })
       .filter((row): row is CustomerResultRow => Boolean(row));
@@ -2563,6 +2569,8 @@ const loadCustomerResultHistory = async () => {
           market: normalizedMarket,
           single_digit: row.single_digit == null ? "" : String(row.single_digit),
           patti: row.patti ? String(row.patti) : "",
+          status: "HISTORICAL",
+          game_off_at: null,
         };
       })
       .filter((row): row is CustomerResultRow => Boolean(row));
@@ -6346,8 +6354,14 @@ const renderCustomerDailyResultCard = (game: "Kolkata Fatafat" | "Dus ka Dum", d
           return (
             <div className="customer-result-bazi-box" key={`${date}-${bazi}`}>
               <div className="customer-result-bazi-label">BAZI {bazi}</div>
-              <div className="customer-result-bazi-patti">{result?.patti || "--"}</div>
-              <div className="customer-result-bazi-single">{result?.single_digit || "--"}</div>
+              {result?.status === "GAME_OFF" ? (
+                <div className="customer-result-game-off-label">GAME OFF</div>
+              ) : (
+                <>
+                  <div className="customer-result-bazi-patti">{result?.patti || "--"}</div>
+                  <div className="customer-result-bazi-single">{result?.single_digit || "--"}</div>
+                </>
+              )}
             </div>
           );
         })}
@@ -13602,7 +13616,7 @@ text-align: center;
 .customer-result-bazi-grid.dus-grid{grid-template-columns:repeat(10,minmax(0,1fr));}
 .customer-result-bazi-box{min-height:92px;padding:5px 3px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border-right:1px solid #39aeb8;box-sizing:border-box;}
 .customer-result-bazi-box:last-child{border-right:0;}
-.customer-result-bazi-label{color:#b07a00;font-size:7px;font-weight:900;}
+.customer-result-bazi-label{color:#b07a00;font-size:7px;font-weight:900;}.customer-result-game-off-label{color:#9b1c1c;font-size:clamp(7px,1.7vw,10px);font-weight:900;text-align:center;line-height:1.2;overflow-wrap:anywhere;}
 .customer-result-bazi-patti{color:#111;font-size:13px;font-weight:900;letter-spacing:.4px;}
 .customer-result-bazi-single{color:#111;font-size:20px;font-weight:900;line-height:1;}
 .customer-result-empty{padding:24px 12px;text-align:center;color:#777f89;font-size:9px;background:#f7f7f7;}
