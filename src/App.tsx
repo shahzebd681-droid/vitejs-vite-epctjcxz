@@ -4095,7 +4095,7 @@ const renderCustomerHeader = () => (
 <span className="brand-crown">♛</span>
 <div>
 <div className="customer-brand"><span className="brand-light">APNA</span> MATKA</div>
-<div className="customer-subtitle">VIRTUAL USD COIN GAMES</div>
+<div className="customer-subtitle">MATKA COIN GAMES</div>
 </div>
 </div>
 <div className="customer-header-balances">
@@ -6911,7 +6911,7 @@ FOOTER
 const renderCustomerFooter = () => (
 
 <footer className="customer-footer">
-<div className="footer-responsible">♜ &nbsp; Play Responsibly &nbsp; | &nbsp; 18+ Only &nbsp; | &nbsp; Virtual USD Coin Games</div>
+<div className="footer-responsible">♜ &nbsp; Play Responsibly &nbsp; | &nbsp; 18+ Only &nbsp; | &nbsp; Matka Coin Games</div>
 </footer>
 
 
@@ -11426,7 +11426,7 @@ font-size: 10px;
 .customer-market.locked {
 
 
-opacity: .55;
+opacity: 1;
 
 
 cursor: not-allowed;
@@ -11743,7 +11743,7 @@ cursor: pointer;
 .customer-bazi-box.locked {
 
 
-opacity: .5;
+opacity: 1;
 
 
 cursor: not-allowed;
@@ -15641,7 +15641,8 @@ color: #111;
 .locked-status,
 .customer-locked{
   margin-top:12px;
-  color:#ff5555;
+  color:#ff3030;
+  text-shadow:0 0 7px rgba(255,48,48,.45);
   font-size:11px;
   font-weight:900;
   text-align:center;
@@ -15667,7 +15668,8 @@ color: #111;
 
 .result-value,
 .customer-result-line strong{
-  color:#fff;
+  color:#ffffff;
+  text-shadow:0 0 4px rgba(255,255,255,.18);
   font-size:15px;
   font-weight:900;
 }
@@ -18016,7 +18018,7 @@ color: #111;
 }
 .customer-market-top-time strong{
   margin-left:auto;
-  color:#f4d17a;
+  color:#ffffff;
   font-size:clamp(16px,4vw,22px);
   font-weight:900;
   line-height:1;
@@ -18526,7 +18528,7 @@ LOGGED-IN CUSTOMER
 <div>
 <div className="brand"><span className="brand-light">APNA</span> MATKA</div>
 <div className="brand-subtitle">
-VIRTUAL USD COIN GAMES
+MATKA COIN GAMES
 </div>
 </div>
 </div>
@@ -18663,7 +18665,7 @@ PUBLIC FOOTER
 ================================================= */}
 
 <footer className="footer">
-  <div className="footer-responsible">♜ &nbsp; Play Responsibly &nbsp; | &nbsp; 18+ Only &nbsp; | &nbsp; Virtual USD Coin Games</div>
+  <div className="footer-responsible">♜ &nbsp; Play Responsibly &nbsp; | &nbsp; 18+ Only &nbsp; | &nbsp; Matka Coin Games</div>
 </footer>
 
 {/* =================================================
