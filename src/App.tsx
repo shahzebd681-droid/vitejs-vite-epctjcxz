@@ -1123,12 +1123,14 @@ const [agentCustomers, setAgentCustomers] = useState<Array<{
   full_name: string;
   email: string;
   status: string;
+  betting_interface?: "EXISTING" | "COMBINED";
 }>>([]);
 const [agentCustomerUsername, setAgentCustomerUsername] = useState("");
 const [agentCustomerFullName, setAgentCustomerFullName] = useState("");
 const [agentCustomerEmail, setAgentCustomerEmail] = useState("");
 const [agentCustomerPassword, setAgentCustomerPassword] = useState("");
 const [agentCustomerConfirmPassword, setAgentCustomerConfirmPassword] = useState("");
+const [agentCustomerBettingInterface, setAgentCustomerBettingInterface] = useState<"EXISTING" | "COMBINED">("EXISTING");
 const [showAgentCustomerForm, setShowAgentCustomerForm] = useState(false);
 const [agentCoinModule, setAgentCoinModule] = useState<"OVERVIEW" | "DEPOSIT_CUSTOMER" | "WITHDRAW_CUSTOMER" | "PASSWORD_RESET" | "CHANGE_PASSWORD">("OVERVIEW");
 const [agentCoinCustomerProfileId, setAgentCoinCustomerProfileId] = useState("");
@@ -1777,7 +1779,14 @@ const createAgentCustomer = async () => {
     const accessToken = await getFreshAgentAdminAccessToken();
     const { data, error } = await supabase.functions.invoke("agent-customer-admin", {
       headers: { Authorization: `Bearer ${accessToken}` },
-      body: { action: "create", username, full_name: fullName || null, email: email || null, password: agentCustomerPassword },
+      body: {
+        action: "create",
+        username,
+        full_name: fullName || null,
+        email: email || null,
+        password: agentCustomerPassword,
+        betting_interface: agentCustomerBettingInterface,
+      },
     });
     if (error) throw error;
     if (!data?.success) throw new Error(data?.error || "Unable to create customer account.");
@@ -1787,6 +1796,7 @@ const createAgentCustomer = async () => {
     setAgentCustomerEmail("");
     setAgentCustomerPassword("");
     setAgentCustomerConfirmPassword("");
+    setAgentCustomerBettingInterface("EXISTING");
     setShowAgentCustomerForm(false);
     setAgentCustomerSuccess(`Customer created successfully. Customer Code: ${data.customer?.customer_code || "N/A"}`);
     await loadAgentCustomerPage(1);
@@ -10562,7 +10572,18 @@ const renderAgentAdminArea = () => {
               <div className="admin-form-field"><label>EMAIL (OPTIONAL)</label><input className="admin-form-input" type="email" value={agentCustomerEmail} onChange={(e) => setAgentCustomerEmail(e.target.value)} placeholder="customer@example.com" /></div>
               <div className="admin-form-field"><label>PASSWORD</label><input className="admin-form-input" type="password" value={agentCustomerPassword} onChange={(e) => setAgentCustomerPassword(e.target.value)} placeholder="8–16 characters" maxLength={16} /></div>
               <div className="admin-form-field"><label>CONFIRM PASSWORD</label><input className="admin-form-input" type="password" value={agentCustomerConfirmPassword} onChange={(e) => setAgentCustomerConfirmPassword(e.target.value)} placeholder="Re-enter password" maxLength={16} /></div>
-              <div className="admin-form-note">Customer will be created under this Agent Admin. Email is optional; username and password are required.</div>
+              <div className="admin-form-field">
+                <label>BETTING INTERFACE</label>
+                <select
+                  className="admin-form-input"
+                  value={agentCustomerBettingInterface}
+                  onChange={(e) => setAgentCustomerBettingInterface(e.target.value as "EXISTING" | "COMBINED")}
+                >
+                  <option value="EXISTING">EXISTING — Current Interface</option>
+                  <option value="COMBINED">COMBINED — Combined Interface</option>
+                </select>
+              </div>
+              <div className="admin-form-note">Customer will be created under this Agent Admin. Email is optional; username and password are required. The selected betting interface is assigned by the Agent Admin and cannot be changed by the customer.</div>
               <button className="admin-create-btn" type="button" onClick={createAgentCustomer} disabled={agentCustomerLoading}>{agentCustomerLoading ? "CREATING..." : "CREATE CUSTOMER"}</button>
             </div>
           </section>
