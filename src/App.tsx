@@ -1933,6 +1933,7 @@ const [showCustomerChangePassword, setShowCustomerChangePassword] = useState(fal
 
 
 const [customerId, setCustomerId] = useState<string | null>(null);
+const [customerBettingInterface, setCustomerBettingInterface] = useState<"EXISTING" | "COMBINED">("EXISTING");
 
 
 const [walletId, setWalletId] = useState<string | null>(null);
@@ -2023,6 +2024,21 @@ Record<string, number>
 
 
 >({});
+
+type CombinedSlipEntry =
+  | { kind: "REGULAR"; betType: BetType; number: string; amount: number; scopeKey: string }
+  | { kind: "JACKPOT"; mode: "HALF_A" | "HALF_B" | "FULL"; combination: string; amount: number; scopeKey: string };
+const [combinedSlipEntries, setCombinedSlipEntries] = useState<CombinedSlipEntry[]>([]);
+const [combinedEntryType, setCombinedEntryType] = useState<BetType>("Single");
+const [combinedEntryNumber, setCombinedEntryNumber] = useState("");
+const [combinedEntryAmount, setCombinedEntryAmount] = useState(10);
+const [combinedJackpotMode, setCombinedJackpotMode] = useState<"HALF_A" | "HALF_B" | "FULL">("HALF_A");
+const [combinedJackpotOpenPatti, setCombinedJackpotOpenPatti] = useState("");
+const [combinedJackpotClosePatti, setCombinedJackpotClosePatti] = useState("");
+const [combinedJackpotOpenSingle, setCombinedJackpotOpenSingle] = useState("");
+const [combinedJackpotCloseSingle, setCombinedJackpotCloseSingle] = useState("");
+const [combinedJackpotAmount, setCombinedJackpotAmount] = useState(5);
+const [combinedJackpotNotice, setCombinedJackpotNotice] = useState("Jackpot submission is not enabled yet. Backend settlement support is required.");
 
 
 const [betHistory, setBetHistory] = useState<BetHistoryItem[]>(
@@ -2827,7 +2843,7 @@ throw new Error("Customer profile was not found.");
 
 const { data: customer, error: customerError } = await supabase
 .from("customers")
-.select("id, profile_id, status")
+.select("id, profile_id, status, betting_interface")
 .eq("profile_id", userId)
 .eq("status", "ACTIVE")
 .maybeSingle();
@@ -2861,6 +2877,9 @@ throw new Error("Customer wallet is not active.");
 setCustomerProfileId(profile.id);
 setCustomerUsername(String(profile.username || ""));
 setCustomerId(customer.id);
+setCustomerBettingInterface(customer.betting_interface === "COMBINED" ? "COMBINED" : "EXISTING");
+setCombinedSlipEntries([]);
+setCombinedEntryNumber("");
 setWalletId(wallet.id);
 setWalletBalance(Number(wallet.available_balance || 0));
 setExposureBalance(Number(wallet.exposure_balance || 0));
@@ -3278,6 +3297,9 @@ if (!user) {
 setIsLoggedIn(false);
 setCustomerEmail("");
 setCustomerUsername("");
+setCustomerBettingInterface("EXISTING");
+setCombinedSlipEntries([]);
+setCombinedEntryNumber("");
 setBetHistory([]);
 setStatement([]);
 setAuthReady(true);
@@ -3454,6 +3476,9 @@ setBetAmount(10);
 
 
 setSelectedBets({});
+setCombinedSlipEntries([]);
+setCombinedEntryNumber("");
+setCombinedJackpotNotice("Jackpot submission is not enabled yet. Backend settlement support is required.");
 
 
 
@@ -3478,6 +3503,9 @@ setPasswordResetConfirm("");
 setShowCustomerChangePassword(false);
 
 setCustomerPage("home");
+setCustomerBettingInterface("EXISTING");
+setCombinedSlipEntries([]);
+setCombinedEntryNumber("");
 
 setSelectedGame("");
 
@@ -10624,13 +10652,139 @@ const renderAgentAdminArea = () => {
   );
 };
 
+const renderCombinedBettingPage = () => {
+  const game = selectedGame as GameName;
+  const status = getSelectedGameStatus();
+  const session = todayPlayableSessions.find((item) => {
+    if (item.game !== selectedGame) return false;
+    if (selectedGame === "Main Bazar" || selectedGame === "PK Main Mumbai") return item.market.toUpperCase() === selectedMarket.toUpperCase();
+    return item.bazi_no === selectedBazi;
+  });
+  const pattiMaster = [...Object.values(singlePatti).flat(), ...Object.values(doublePatti).flat(), ...triplePatti];
+  const validPatti = new Set(pattiMaster);
+  const scopeKey = `${selectedGame}|${getLocalDateString()}|${session?.id || "NO_SESSION"}`;
+  const regularEntries = combinedSlipEntries.filter((item): item is Extract<CombinedSlipEntry, { kind: "REGULAR" }> => item.kind === "REGULAR" && item.scopeKey === scopeKey);
+  const jackpotEntries = combinedSlipEntries.filter((item): item is Extract<CombinedSlipEntry, { kind: "JACKPOT" }> => item.kind === "JACKPOT" && item.scopeKey === scopeKey);
+  const total = combinedSlipEntries.filter(item => item.scopeKey === scopeKey).reduce((sum, item) => sum + item.amount, 0);
+  const isJackpotGame = selectedGame === "Main Bazar" || selectedGame === "PK Main Mumbai";
+  const addCombinedEntry = () => {
+    const number = combinedEntryNumber.trim();
+    if (!number) { alert("Please enter a number or Patti."); return; }
+    if (combinedEntryType === "Single" && !/^[0-9]$/.test(number)) { alert("Single entry must be one digit (0–9)."); return; }
+    if (combinedEntryType === "Jodi" && !/^[0-9]{2}$/.test(number)) { alert("Jodi must be exactly two digits (00–99)."); return; }
+    if (["Single Patti", "Double Patti", "Triple Patti"].includes(combinedEntryType) && (!/^[0-9]{3}$/.test(number) || !validPatti.has(number))) { alert("Please select a valid Patti from the existing 220 Patti list."); return; }
+    const minimum = combinedEntryType === "Single" || combinedEntryType === "Jodi" ? 10 : 5;
+    if (combinedEntryAmount < minimum || combinedEntryAmount > (combinedEntryType === "Single" ? 5000 : combinedEntryType === "Jodi" ? 500 : 1000)) { alert(`Stake must be between $${minimum} and the allowed limit.`); return; }
+    setCombinedSlipEntries(previous => {
+      const scoped = previous.filter(item => item.scopeKey === scopeKey);
+      const index = scoped.findIndex(item => item.kind === "REGULAR" && item.betType === combinedEntryType && item.number === number);
+      if (index < 0) return [...scoped, { kind: "REGULAR", betType: combinedEntryType, number, amount: combinedEntryAmount, scopeKey }];
+      return scoped.map((item, i) => i === index ? { ...item, amount: item.amount + combinedEntryAmount } : item);
+    });
+    setCombinedEntryNumber("");
+  };
+  const submitCombinedSlip = async () => {
+    if (betSubmitting) return;
+    if (!isLoggedIn || !customerId || !customerProfileId || !walletId) { alert("Customer account is not ready. Please log in again."); return; }
+    if (!session || status !== "RUNNING" || !session.deadline_at || new Date(session.deadline_at).getTime() <= Date.now()) { alert("Betting is locked for this session."); return; }
+    if (jackpotEntries.length) { alert("This Combined Slip contains Half/Full Jackpot entries. Jackpot backend submission and settlement are not available yet. No part of this mixed slip has been submitted or charged."); return; }
+    if (!regularEntries.length) { alert("Add at least one bet to the Combined Slip."); return; }
+    if (total > walletBalance) { alert("Insufficient virtual wallet balance."); return; }
+    setBetSubmitting(true);
+    try {
+      const items = regularEntries.map(item => ({ bet_type: item.betType, played_number: item.number, stake: item.amount, rate: getBetRate(game, item.betType) }));
+      const fingerprint = JSON.stringify({ customer_id: customerId, session_id: session.id, performed_by: customerProfileId, items });
+      const storageKey = `apna-matka-pending-bet-requests:${customerProfileId}`;
+      let pending = pendingBetRequestIds.current;
+      try { const raw = sessionStorage.getItem(storageKey); if (raw) { const parsed = JSON.parse(raw); if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) pending = parsed; } } catch {}
+      let requestId = pending[fingerprint];
+      if (!requestId) { requestId = crypto.randomUUID(); pending[fingerprint] = requestId; }
+      pendingBetRequestIds.current = pending;
+      try { sessionStorage.setItem(storageKey, JSON.stringify(pending)); } catch {}
+      const { data, error } = await supabase.rpc("submit_customer_bet", { p_customer_id: customerId, p_session_id: session.id, p_performed_by: customerProfileId, p_items: items, p_request_id: requestId });
+      if (error) throw error;
+      const result = Array.isArray(data) ? data[0] : data;
+      if (!result) throw new Error("Bet submission returned no result.");
+      setWalletBalance(Number(result.available_balance || 0));
+      setExposureBalance(Number(result.exposure_balance || 0));
+      const now = new Date();
+      const date = now.toLocaleDateString("en-IN");
+      const time = now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+      setBetHistory(previous => [...regularEntries.map((item, index) => ({ id: Date.now() + index, date, time, game: selectedGame, sessionCode: session.session_code || "-", market: selectedMarket || "-", bazi: selectedBazi !== null ? `Bazi ${selectedBazi}` : "-", type: item.betType, number: item.number, amount: item.amount, rate: getBetRate(game, item.betType), status: "PENDING", result: "-", wonAmount: 0 })), ...previous]);
+      delete pending[fingerprint];
+      try { if (Object.keys(pending).length) sessionStorage.setItem(storageKey, JSON.stringify(pending)); else sessionStorage.removeItem(storageKey); } catch {}
+      alert(`Combined slip submitted successfully.\nGame: ${getBetTitle()}\nEntries: ${regularEntries.length}\nTotal stake: $${total.toFixed(2)}`);
+      setCombinedSlipEntries([]);
+    } catch (error) { alert(`Slip could not be submitted.\n\n${error instanceof Error ? error.message : "Unable to submit slip."}`); }
+    finally { setBetSubmitting(false); }
+  };
+  const addJackpotEntry = () => {
+    if (!isJackpotGame || selectedMarket.toUpperCase() !== "OPEN") { alert("Jackpot is available only for Main Bazar OPEN and PK Main Mumbai OPEN."); return; }
+    if (!session) { alert("Select an available OPEN session first."); return; }
+    if (![5,10,15,20,25,30,35,40,45,50].includes(combinedJackpotAmount)) { alert("Jackpot stake must be one of the allowed denominations from $5 to $50."); return; }
+    const isPatti = (value: string) => /^[0-9]{3}$/.test(value) && validPatti.has(value);
+    if (combinedJackpotMode === "HALF_A" && (!/^[0-9]$/.test(combinedJackpotOpenSingle) || !isPatti(combinedJackpotClosePatti))) { alert("Mode A requires OPEN Single digit and CLOSE Patti."); return; }
+    if (combinedJackpotMode === "HALF_B" && (!isPatti(combinedJackpotOpenPatti) || !/^[0-9]$/.test(combinedJackpotCloseSingle))) { alert("Mode B requires OPEN Patti and CLOSE Single digit."); return; }
+    if (combinedJackpotMode === "FULL" && (!isPatti(combinedJackpotOpenPatti) || !isPatti(combinedJackpotClosePatti))) { alert("Full Jackpot requires OPEN Patti and CLOSE Patti."); return; }
+    const combination = combinedJackpotMode === "HALF_A" ? `${combinedJackpotOpenSingle} × ${combinedJackpotClosePatti}` : combinedJackpotMode === "HALF_B" ? `${combinedJackpotOpenPatti} × ${combinedJackpotCloseSingle}` : `${combinedJackpotOpenPatti} × ${combinedJackpotClosePatti}`;
+    setCombinedSlipEntries(previous => {
+      const scoped = previous.filter(item => item.scopeKey === scopeKey);
+      const index = scoped.findIndex(item => item.kind === "JACKPOT" && item.mode === combinedJackpotMode && item.combination === combination);
+      if (index < 0) return [...scoped, { kind: "JACKPOT", mode: combinedJackpotMode, combination, amount: combinedJackpotAmount, scopeKey }];
+      return scoped.map((item, i) => i === index ? { ...item, amount: item.amount + combinedJackpotAmount } : item);
+    });
+    setCombinedJackpotNotice("Added to the same Combined Slip. Jackpot submission remains locked until backend submission and settlement are implemented; no wallet amount has been reserved.");
+  };
+  const removeSlipEntry = (entry: CombinedSlipEntry) => setCombinedSlipEntries(previous => previous.filter(item => !(item.scopeKey === entry.scopeKey && item.kind === entry.kind && (item.kind === "REGULAR" ? entry.kind === "REGULAR" && item.betType === entry.betType && item.number === entry.number : entry.kind === "JACKPOT" && item.mode === entry.mode && item.combination === entry.combination))));
+  const scopedEntries = combinedSlipEntries.filter(item => item.scopeKey === scopeKey);
+  return (
+    <>
+      {renderCustomerHeader()}
+      <main className="customer-main customer-betting-page" style={{ paddingBottom: 100 }}>
+        <div className="betting-topbar"><button className="back-btn" onClick={() => openCustomerPage("home")}>← Back</button><div className="betting-title">Combined Betting</div><div className="betting-balance">${walletBalance.toFixed(0)}</div></div>
+        <section style={{ background: "#111820", border: "1px solid #b68a32", borderRadius: 14, padding: 16, margin: "12px 0" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}><strong>{getBetTitle()}</strong><span style={{ color: status === "RUNNING" ? "#39d98a" : "#ff6b6b", fontWeight: 700 }}>{status}</span></div>
+          <div style={{ color: "#b9c2cc", fontSize: 13, marginTop: 6 }}>One Combined Slip · One game · One date · One session · {session?.session_code || "Session unavailable"}</div>
+        </section>
+        <section style={{ background: "#111820", borderRadius: 14, padding: 16, marginBottom: 14 }}>
+          <h3 style={{ margin: "0 0 12px", color: "#e8bd58" }}>Add multiple bet types</h3>
+          <label style={{ display: "block", marginBottom: 6 }}>Bet type</label>
+          <select value={combinedEntryType} onChange={e => setCombinedEntryType(e.target.value as BetType)} style={{ width: "100%", padding: 12, borderRadius: 8, marginBottom: 12, background: "#080d12", color: "white", border: "1px solid #47515c" }}>{(["Single", "Single Patti", "Double Patti", "Triple Patti", "Jodi"] as BetType[]).map(type => <option key={type} value={type}>{type} · {getBetRate(game, type)}X</option>)}</select>
+          <label style={{ display: "block", marginBottom: 6 }}>{combinedEntryType.includes("Patti") ? "Patti (from existing 220 list)" : combinedEntryType === "Jodi" ? "Jodi (00–99)" : "Single digit (0–9)"}</label>
+          <input value={combinedEntryNumber} onChange={e => setCombinedEntryNumber(e.target.value.replace(/[^0-9]/g, "").slice(0, 3))} inputMode="numeric" placeholder={combinedEntryType.includes("Patti") ? "e.g. 123" : combinedEntryType === "Jodi" ? "e.g. 07" : "e.g. 6"} style={{ width: "100%", padding: 12, borderRadius: 8, background: "#080d12", color: "white", border: "1px solid #47515c", marginBottom: 12 }} />
+          <label style={{ display: "block", marginBottom: 6 }}>Stake (USD coin)</label>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>{[5,10,15,20,25,30,35,40,45,50,100,200,500,1000].map(amount => <button key={amount} onClick={() => setCombinedEntryAmount(amount)} style={{ padding: "9px 12px", borderRadius: 8, border: combinedEntryAmount === amount ? "1px solid #e8bd58" : "1px solid #4c5661", background: combinedEntryAmount === amount ? "#5b4317" : "#202a34", color: "white" }}>${amount}</button>)}</div>
+          <button onClick={addCombinedEntry} style={{ width: "100%", padding: 13, border: 0, borderRadius: 9, background: "#d5a63d", color: "#17120a", fontWeight: 800 }}>+ ADD REGULAR BET TO COMBINED SLIP</button>
+        </section>
+        <section style={{ background: "#111820", borderRadius: 14, padding: 16, marginBottom: 14 }}>
+          <h3 style={{ margin: "0 0 8px", color: "#e8bd58" }}>Half Jackpot / Full Jackpot</h3>
+          <p style={{ color: "#b9c2cc", fontSize: 13 }}>Jackpot is part of this same Combined Slip. Available only for Main Bazar OPEN and PK Main Mumbai OPEN. Half Jackpot 1250X · Full Jackpot 12500X.</p>
+          <select value={combinedJackpotMode} onChange={e => setCombinedJackpotMode(e.target.value as "HALF_A" | "HALF_B" | "FULL")} style={{ width: "100%", padding: 11, marginBottom: 10, background: "#080d12", color: "white", borderRadius: 8 }}><option value="HALF_A">Half Jackpot · OPEN Single × CLOSE Patti · 1250X</option><option value="HALF_B">Half Jackpot · OPEN Patti × CLOSE Single · 1250X</option><option value="FULL">Full Jackpot · OPEN Patti × CLOSE Patti · 12500X</option></select>
+          {combinedJackpotMode === "HALF_A" ? <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}><input value={combinedJackpotOpenSingle} onChange={e => setCombinedJackpotOpenSingle(e.target.value.replace(/[^0-9]/g, "").slice(0,1))} placeholder="OPEN Single" style={{ padding: 10, minWidth: 0 }} /><input value={combinedJackpotClosePatti} onChange={e => setCombinedJackpotClosePatti(e.target.value.replace(/[^0-9]/g, "").slice(0,3))} placeholder="CLOSE Patti" style={{ padding: 10, minWidth: 0 }} /></div> : combinedJackpotMode === "HALF_B" ? <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}><input value={combinedJackpotOpenPatti} onChange={e => setCombinedJackpotOpenPatti(e.target.value.replace(/[^0-9]/g, "").slice(0,3))} placeholder="OPEN Patti" style={{ padding: 10, minWidth: 0 }} /><input value={combinedJackpotCloseSingle} onChange={e => setCombinedJackpotCloseSingle(e.target.value.replace(/[^0-9]/g, "").slice(0,1))} placeholder="CLOSE Single" style={{ padding: 10, minWidth: 0 }} /></div> : <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}><input value={combinedJackpotOpenPatti} onChange={e => setCombinedJackpotOpenPatti(e.target.value.replace(/[^0-9]/g, "").slice(0,3))} placeholder="OPEN Patti" style={{ padding: 10, minWidth: 0 }} /><input value={combinedJackpotClosePatti} onChange={e => setCombinedJackpotClosePatti(e.target.value.replace(/[^0-9]/g, "").slice(0,3))} placeholder="CLOSE Patti" style={{ padding: 10, minWidth: 0 }} /></div>}
+          <div style={{ display: "flex", gap: 7, flexWrap: "wrap", margin: "12px 0" }}>{[5,10,15,20,25,30,35,40,45,50].map(amount => <button key={amount} onClick={() => setCombinedJackpotAmount(amount)} style={{ padding: "8px 10px", borderRadius: 7, background: combinedJackpotAmount === amount ? "#5b4317" : "#202a34", color: "white", border: "1px solid #6c5a37" }}>${amount}</button>)}</div>
+          <button onClick={addJackpotEntry} style={{ width: "100%", padding: 12, border: "1px solid #d5a63d", borderRadius: 8, background: "transparent", color: "#e8bd58", fontWeight: 800 }}>+ ADD JACKPOT TO SAME COMBINED SLIP</button>
+          <p style={{ color: "#ffcb6b", fontSize: 12, marginBottom: 0 }}>{combinedJackpotNotice}</p>
+        </section>
+        <section style={{ background: "#111820", borderRadius: 14, padding: 16, marginBottom: 20 }}>
+          <h3 style={{ margin: "0 0 12px", color: "#e8bd58" }}>Combined Slip ({scopedEntries.length})</h3>
+          {!scopedEntries.length ? <p style={{ color: "#aab4bf" }}>No entries added yet.</p> : scopedEntries.map((item, index) => <div key={item.kind === "REGULAR" ? `R-${item.betType}-${item.number}` : `J-${item.mode}-${item.combination}`} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "10px 0", borderBottom: "1px solid #303a45" }}><div style={{ minWidth: 0 }}><strong>{item.kind === "REGULAR" ? item.betType : item.mode === "FULL" ? "Full Jackpot" : item.mode === "HALF_A" ? "Half Jackpot · Mode A" : "Half Jackpot · Mode B"}</strong><div style={{ color: "#b9c2cc", fontSize: 13, overflowWrap: "anywhere" }}>{item.kind === "REGULAR" ? `${item.number} · ${getBetRate(game, item.betType)}X` : item.combination}</div></div><strong>${item.amount.toFixed(2)}</strong><button onClick={() => removeSlipEntry(item)} style={{ background: "#6d2525", color: "white", border: 0, borderRadius: 7, padding: "7px 10px" }}>Remove</button></div>)}
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 14, fontWeight: 800 }}><span>Combined total stake</span><span>${total.toFixed(2)}</span></div>
+          {jackpotEntries.length > 0 ? <p style={{ color: "#ffcb6b", fontSize: 12 }}>This slip includes Jackpot entries. The complete slip is not submitted and no wallet amount is reserved until Jackpot backend support is implemented.</p> : null}
+          <button disabled={!scopedEntries.length || jackpotEntries.length > 0 || betSubmitting || status !== "RUNNING"} onClick={submitCombinedSlip} style={{ width: "100%", padding: 14, marginTop: 14, border: 0, borderRadius: 9, background: !scopedEntries.length || jackpotEntries.length > 0 || betSubmitting || status !== "RUNNING" ? "#555" : "#20a56a", color: "white", fontWeight: 800 }}>{betSubmitting ? "SUBMITTING..." : jackpotEntries.length ? "JACKPOT BACKEND REQUIRED — SUBMISSION LOCKED" : "SUBMIT COMBINED SLIP"}</button>
+          <button disabled={!scopedEntries.length} onClick={() => setCombinedSlipEntries(previous => previous.filter(item => item.scopeKey !== scopeKey))} style={{ width: "100%", padding: 11, marginTop: 8, border: "1px solid #697582", borderRadius: 9, background: "transparent", color: "white" }}>CLEAR COMBINED SLIP</button>
+        </section>
+      </main>
+    </>
+  );
+};
+
 const renderCustomerArea = () => {
 
 
 if (customerPage === "betting") {
 
 
-return renderBettingPage();
+return customerBettingInterface === "COMBINED" ? renderCombinedBettingPage() : renderBettingPage();
 
 
 }
